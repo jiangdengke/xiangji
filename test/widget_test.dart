@@ -21,8 +21,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Xiangji Stream'), findsOneWidget);
-    expect(find.text('Controls'), findsOneWidget);
     expect(find.text('Fallback'), findsOneWidget);
+    expect(find.text('Camera'), findsWidgets);
+
+    await tester.scrollUntilVisible(
+      find.text('Controls'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Controls'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('Upload target'),

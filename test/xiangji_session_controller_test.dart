@@ -32,11 +32,59 @@ void main() {
 
     controller.dispose();
   });
+
+  test('controller distinguishes USB devices from video cameras', () async {
+    final bridge = _TestBridge(
+      devices: const <UsbCameraDevice>[
+        UsbCameraDevice(
+          deviceId: 'usb-hub-1',
+          deviceName: 'Unit Test Hub',
+          vendorId: 3,
+          productId: 4,
+          permissionGranted: true,
+          videoClass: false,
+          interfaceCount: 1,
+        ),
+      ],
+    );
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+    );
+
+    await controller.initialize();
+
+    expect(controller.hasUsbDevices, isTrue);
+    expect(controller.hasVideoCamera, isFalse);
+    expect(controller.canStart, isFalse);
+    expect(
+      controller.statusMessage,
+      'USB devices detected, but no video camera found.',
+    );
+
+    controller.dispose();
+  });
 }
 
 class _TestBridge implements CameraBridge {
+  _TestBridge({List<UsbCameraDevice>? devices})
+    : _devices =
+          devices ??
+          const <UsbCameraDevice>[
+            UsbCameraDevice(
+              deviceId: 'usb-1',
+              deviceName: 'Unit Test Camera',
+              vendorId: 1,
+              productId: 2,
+              permissionGranted: true,
+              videoClass: true,
+              interfaceCount: 1,
+            ),
+          ];
+
   final StreamController<CameraBridgeEvent> _events =
       StreamController<CameraBridgeEvent>.broadcast();
+  final List<UsbCameraDevice> _devices;
 
   @override
   Stream<CameraBridgeEvent> get events => _events.stream;
@@ -46,17 +94,7 @@ class _TestBridge implements CameraBridge {
 
   @override
   Future<List<UsbCameraDevice>> listDevices() async {
-    return <UsbCameraDevice>[
-      const UsbCameraDevice(
-        deviceId: 'usb-1',
-        deviceName: 'Unit Test Camera',
-        vendorId: 1,
-        productId: 2,
-        permissionGranted: true,
-        videoClass: true,
-        interfaceCount: 1,
-      ),
-    ];
+    return List<UsbCameraDevice>.unmodifiable(_devices);
   }
 
   @override

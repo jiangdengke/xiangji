@@ -55,6 +55,14 @@ class XiangjiSessionController extends ChangeNotifier {
   String get lastError => _lastError;
   List<UsbCameraDevice> get devices =>
       List<UsbCameraDevice>.unmodifiable(_devices);
+  bool get hasUsbDevices => _devices.isNotEmpty;
+  int get usbDeviceCount => _devices.length;
+  bool get hasVideoCamera => _devices.any((UsbCameraDevice device) {
+    return device.videoClass;
+  });
+  int get videoCameraCount => _devices.where((UsbCameraDevice device) {
+    return device.videoClass;
+  }).length;
   String? get selectedDeviceId => _selectedDeviceId;
   UsbCameraDevice? get selectedDevice {
     final id = _selectedDeviceId;
@@ -93,6 +101,7 @@ class XiangjiSessionController extends ChangeNotifier {
   bool get canStart {
     final device = selectedDevice;
     return device != null &&
+        device.videoClass &&
         phase != SessionPhase.starting &&
         phase != SessionPhase.stopping &&
         !isUploading &&
@@ -134,23 +143,16 @@ class XiangjiSessionController extends ChangeNotifier {
     try {
       final devices = await _bridge.listDevices();
       _replaceDevices(devices);
+      final inventoryMessage = _inventoryMessage();
       if (_phase == SessionPhase.discovering) {
         _phase = _devices.isEmpty ? SessionPhase.idle : SessionPhase.ready;
-        _statusMessage = _devices.isEmpty
-            ? 'No USB camera detected.'
-            : '${_devices.length} USB device(s) found.';
+        _statusMessage = inventoryMessage;
       }
       if (_phase == SessionPhase.permissionRequested && _devices.isNotEmpty) {
         _phase = SessionPhase.ready;
         _statusMessage = 'USB permission ready.';
       }
-      _appendLog(
-        _devices.isEmpty
-            ? 'No USB camera detected.'
-            : 'Found ${_devices.length} USB device(s).',
-        LogLevel.info,
-        topic: LogTopic.device,
-      );
+      _appendLog(inventoryMessage, LogLevel.info, topic: LogTopic.device);
       _lastError = '';
       notifyListeners();
     } catch (error, stackTrace) {
@@ -210,6 +212,15 @@ class XiangjiSessionController extends ChangeNotifier {
       return;
     }
 
+    if (!device.videoClass) {
+      _appendLog(
+        'Selected USB device is not a video camera.',
+        LogLevel.warning,
+        topic: LogTopic.permission,
+      );
+      return;
+    }
+
     _phase = SessionPhase.permissionRequested;
     _statusMessage = 'Requesting permission for ${device.deviceName}.';
     notifyListeners();
@@ -235,6 +246,15 @@ class XiangjiSessionController extends ChangeNotifier {
     if (device == null) {
       _appendLog(
         'Pick a USB camera before starting.',
+        LogLevel.warning,
+        topic: LogTopic.device,
+      );
+      return;
+    }
+
+    if (!device.videoClass) {
+      _appendLog(
+        'Selected USB device is not a video camera.',
         LogLevel.warning,
         topic: LogTopic.device,
       );
@@ -337,13 +357,7 @@ class XiangjiSessionController extends ChangeNotifier {
     switch (event) {
       case CameraDevicesUpdated(:final devices):
         _replaceDevices(devices);
-        _appendLog(
-          devices.isEmpty
-              ? 'USB scan updated: no camera detected.'
-              : 'USB scan updated: ${devices.length} device(s) visible.',
-          LogLevel.info,
-          topic: LogTopic.device,
-        );
+        _appendLog(_inventoryMessage(), LogLevel.info, topic: LogTopic.device);
         notifyListeners();
         break;
       case CameraStatusEvent(:final phase, :final message):
@@ -405,12 +419,36 @@ class XiangjiSessionController extends ChangeNotifier {
       return;
     }
 
-    if (_selectedDeviceId == null ||
-        !_devices.any((UsbCameraDevice device) {
+    final currentSelectedExists =
+        _selectedDeviceId != null &&
+        _devices.any((UsbCameraDevice device) {
           return device.deviceId == _selectedDeviceId;
-        })) {
-      _selectedDeviceId = _devices.first.deviceId;
+        });
+    if (currentSelectedExists) {
+      return;
     }
+
+    final preferredDevice = _devices.firstWhere(
+      (UsbCameraDevice device) => device.videoClass,
+      orElse: () => _devices.first,
+    );
+    _selectedDeviceId = preferredDevice.deviceId;
+  }
+
+  String _inventoryMessage() {
+    if (_devices.isEmpty) {
+      return 'No USB device detected.';
+    }
+    if (!hasVideoCamera) {
+      return 'USB devices detected, but no video camera found.';
+    }
+    if (usbDeviceCount == 1 && videoCameraCount == 1) {
+      return '1 USB camera detected.';
+    }
+    if (videoCameraCount == 1) {
+      return '1 USB camera detected among $usbDeviceCount USB devices.';
+    }
+    return '$videoCameraCount USB cameras detected among $usbDeviceCount USB devices.';
   }
 
   void _enqueueSegment(CameraSegment segment) {

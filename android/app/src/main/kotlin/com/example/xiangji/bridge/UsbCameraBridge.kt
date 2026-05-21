@@ -26,33 +26,119 @@ class UsbCameraBridge(
     private val methodChannel = MethodChannel(messenger, METHOD_CHANNEL)
     private val eventChannel = EventChannel(messenger, EVENT_CHANNEL)
     private var receiverRegistered = false
+    private var activeStreamDeviceId: String? = null
 
-    private val permissionReceiver = object : BroadcastReceiver() {
+    private val usbStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != ACTION_USB_PERMISSION) {
-                return
+            when (intent.action) {
+                ACTION_USB_PERMISSION -> handleUsbPermission(intent)
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> handleUsbChange(
+                    action = "attached",
+                    device = intent.usbDevice(),
+                )
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> handleUsbChange(
+                    action = "detached",
+                    device = intent.usbDevice(),
+                )
             }
+        }
+    }
 
-            val device = intent.usbDevice()
-            val granted = intent.getBooleanExtra(
-                UsbManager.EXTRA_PERMISSION_GRANTED,
-                false,
+    private fun handleUsbPermission(intent: Intent) {
+        val device = intent.usbDevice()
+        val granted = intent.getBooleanExtra(
+            UsbManager.EXTRA_PERMISSION_GRANTED,
+            false,
+        )
+        val deviceId = device?.deviceName.orEmpty()
+
+        CameraBridgeEventBus.permission(deviceId, granted)
+        publishInventorySnapshot(
+            reason = if (granted) "permission granted" else "permission denied",
+            announceStatus = true,
+        )
+        if (granted) {
+            CameraBridgeEventBus.status(
+                phase = "ready",
+                message = "USB permission granted.",
             )
-            val deviceId = device?.deviceName.orEmpty()
+        } else {
+            CameraBridgeEventBus.error(
+                message = "USB permission denied.",
+                details = deviceId,
+            )
+        }
+    }
 
-            CameraBridgeEventBus.permission(deviceId, granted)
-            CameraBridgeEventBus.devices(listDeviceMaps())
-            if (granted) {
-                CameraBridgeEventBus.status(
-                    phase = "ready",
-                    message = "USB permission granted.",
-                )
-            } else {
-                CameraBridgeEventBus.error(
-                    message = "USB permission denied.",
-                    details = deviceId,
-                )
-            }
+    private fun handleUsbChange(
+        action: String,
+        device: UsbDevice?,
+    ) {
+        val deviceId = device?.deviceName.orEmpty()
+        val cameraRemoved = action == "detached" && deviceId == activeStreamDeviceId
+
+        if (cameraRemoved) {
+            CameraBridgeEventBus.log(
+                level = "error",
+                message = "Active USB camera detached: $deviceId.",
+            )
+            appContext.stopService(Intent(appContext, CameraStreamService::class.java))
+            activeStreamDeviceId = null
+            publishInventorySnapshot(
+                reason = "camera detached while streaming",
+                announceStatus = false,
+            )
+            CameraBridgeEventBus.status(
+                phase = "error",
+                message = "USB camera detached while streaming.",
+            )
+            return
+        }
+
+        if (device != null) {
+            CameraBridgeEventBus.log(
+                level = "info",
+                message = "USB device ${action}: ${device.displayName()} (${device.deviceName}).",
+            )
+        }
+
+        publishInventorySnapshot(
+            reason = "USB device $action",
+            announceStatus = true,
+        )
+    }
+
+    private fun publishInventorySnapshot(
+        reason: String,
+        announceStatus: Boolean,
+    ) {
+        val devices = listDeviceMaps()
+        val summary = buildInventorySummary(devices)
+
+        CameraBridgeEventBus.devices(devices)
+        CameraBridgeEventBus.log(
+            level = "debug",
+            message = "$reason: $summary",
+        )
+
+        if (!announceStatus || activeStreamDeviceId != null) {
+            return
+        }
+
+        if (devices.any { it["videoClass"] == true }) {
+            CameraBridgeEventBus.status(
+                phase = "ready",
+                message = summary,
+            )
+        } else {
+            CameraBridgeEventBus.log(
+                level = if (devices.isEmpty()) "info" else "warning",
+                message = summary,
+            )
+            CameraBridgeEventBus.status(
+                phase = "idle",
+                message = summary,
+            )
         }
     }
 
@@ -72,7 +158,10 @@ class UsbCameraBridge(
     override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
         CameraBridgeEventBus.attach(events)
         CameraBridgeEventBus.log("debug", "USB event channel attached.")
-        CameraBridgeEventBus.devices(listDeviceMaps())
+        publishInventorySnapshot(
+            reason = "initial USB scan",
+            announceStatus = true,
+        )
     }
 
     override fun onCancel(arguments: Any?) {
@@ -181,6 +270,7 @@ class UsbCameraBridge(
             phase = "starting",
             message = "Starting camera foreground service.",
         )
+        activeStreamDeviceId = deviceId
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             appContext.startForegroundService(intent)
         } else {
@@ -194,6 +284,7 @@ class UsbCameraBridge(
             phase = "stopping",
             message = "Stopping camera foreground service.",
         )
+        activeStreamDeviceId = null
         appContext.stopService(Intent(appContext, CameraStreamService::class.java))
         result.success(null)
     }
@@ -202,16 +293,20 @@ class UsbCameraBridge(
         if (receiverRegistered) {
             return
         }
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
+        val filter = IntentFilter().apply {
+            addAction(ACTION_USB_PERMISSION)
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             appContext.registerReceiver(
-                permissionReceiver,
+                usbStateReceiver,
                 filter,
                 Context.RECEIVER_NOT_EXPORTED,
             )
         } else {
             @Suppress("DEPRECATION")
-            appContext.registerReceiver(permissionReceiver, filter)
+            appContext.registerReceiver(usbStateReceiver, filter)
         }
         receiverRegistered = true
     }
@@ -221,7 +316,7 @@ class UsbCameraBridge(
             return
         }
         runCatching {
-            appContext.unregisterReceiver(permissionReceiver)
+            appContext.unregisterReceiver(usbStateReceiver)
         }
         receiverRegistered = false
     }
@@ -237,6 +332,18 @@ class UsbCameraBridge(
                 "videoClass" to isVideoClass(device),
                 "interfaceCount" to device.interfaceCount,
             )
+        }
+    }
+
+    private fun buildInventorySummary(devices: List<Map<String, Any?>>): String {
+        val usbCount = devices.size
+        val cameraCount = devices.count { it["videoClass"] == true }
+
+        return when {
+            usbCount == 0 -> "No USB device detected."
+            cameraCount == 0 -> "$usbCount USB device(s) detected, but no video camera found."
+            usbCount == cameraCount -> "$cameraCount USB camera(s) detected."
+            else -> "$cameraCount USB camera(s) detected among $usbCount USB device(s)."
         }
     }
 

@@ -140,6 +140,22 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                 value: controller.phase.name,
               ),
               _StatTile(
+                icon: controller.hasUsbDevices ? Icons.usb : Icons.usb_off,
+                label: 'USB',
+                value: controller.hasUsbDevices
+                    ? controller.usbDeviceCount.toString()
+                    : '0',
+              ),
+              _StatTile(
+                icon: controller.hasVideoCamera
+                    ? Icons.videocam
+                    : Icons.videocam_off,
+                label: 'Camera',
+                value: controller.hasVideoCamera
+                    ? controller.videoCameraCount.toString()
+                    : 'None',
+              ),
+              _StatTile(
                 icon: Icons.cloud_upload,
                 label: 'Queued',
                 value: controller.pendingUploadCount.toString(),
@@ -196,7 +212,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
             label: const Text('Stop'),
           ),
           OutlinedButton.icon(
-            onPressed: selectedDevice == null
+            onPressed: selectedDevice == null || !selectedDevice.videoClass
                 ? null
                 : controller.requestPermission,
             icon: const Icon(Icons.lock_open),
@@ -270,8 +286,10 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
     return _Section(
       title: 'USB devices',
       subtitle: devices.isEmpty
-          ? 'No USB camera is visible to the bridge.'
-          : '${devices.length} device(s) detected.',
+          ? 'No USB device is visible to the bridge.'
+          : controller.hasVideoCamera
+          ? '${controller.videoCameraCount} camera(s) detected.'
+          : 'USB devices detected, but no video camera found.',
       child: devices.isEmpty
           ? const Text('No compatible camera was detected.')
           : Column(
@@ -327,13 +345,26 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              Chip(
-                                label: Text(
-                                  device.permissionGranted
-                                      ? 'Granted'
-                                      : 'Pending',
-                                ),
-                                visualDensity: VisualDensity.compact,
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: <Widget>[
+                                  Chip(
+                                    label: Text(
+                                      device.videoClass ? 'Camera' : 'USB',
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Chip(
+                                    label: Text(
+                                      device.permissionGranted
+                                          ? 'Granted'
+                                          : 'Pending',
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -502,10 +533,15 @@ class _ProcessFlow extends StatelessWidget {
     if (controller.phase == SessionPhase.discovering) {
       return 'Scanning';
     }
-    if (controller.devices.isEmpty) {
+    if (!controller.hasUsbDevices) {
       return 'Not connected';
     }
-    return '${controller.devices.length} detected';
+    if (controller.hasVideoCamera) {
+      return controller.usbDeviceCount == controller.videoCameraCount
+          ? '${controller.videoCameraCount} camera(s)'
+          : '${controller.videoCameraCount} camera(s) in ${controller.usbDeviceCount} USB devices';
+    }
+    return 'No camera';
   }
 
   _FlowState _usbState() {
@@ -515,8 +551,11 @@ class _ProcessFlow extends StatelessWidget {
     if (controller.phase == SessionPhase.discovering) {
       return _FlowState.active;
     }
-    if (controller.devices.isNotEmpty) {
+    if (controller.hasVideoCamera) {
       return _FlowState.done;
+    }
+    if (controller.hasUsbDevices) {
+      return _FlowState.idle;
     }
     return _FlowState.blocked;
   }
@@ -524,6 +563,9 @@ class _ProcessFlow extends StatelessWidget {
   String _permissionValue(UsbCameraDevice? selectedDevice) {
     if (selectedDevice == null) {
       return 'No device';
+    }
+    if (!selectedDevice.videoClass) {
+      return 'Not camera';
     }
     if (controller.phase == SessionPhase.permissionRequested) {
       return 'Requesting';
@@ -538,10 +580,16 @@ class _ProcessFlow extends StatelessWidget {
     if (selectedDevice == null) {
       return _FlowState.blocked;
     }
+    if (!selectedDevice.videoClass) {
+      return _FlowState.idle;
+    }
     return selectedDevice.permissionGranted ? _FlowState.done : _FlowState.idle;
   }
 
   String _videoValue() {
+    if (!controller.hasVideoCamera) {
+      return 'No camera';
+    }
     return switch (controller.phase) {
       SessionPhase.starting => 'Starting',
       SessionPhase.streaming => 'Recording',
@@ -558,6 +606,9 @@ class _ProcessFlow extends StatelessWidget {
     if (controller.phase == SessionPhase.starting ||
         controller.phase == SessionPhase.streaming) {
       return _FlowState.active;
+    }
+    if (!controller.hasVideoCamera) {
+      return _FlowState.idle;
     }
     if (selectedDevice?.permissionGranted ?? false) {
       return _FlowState.idle;

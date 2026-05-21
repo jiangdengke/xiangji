@@ -11,6 +11,8 @@ Flutter shell for an Android USB camera streaming app.
 - Android foreground service for Camera2 recording.
 - Camera2 H.264/MP4 segment recorder that emits finished segments to the Dart
   upload queue while recording continues.
+- USB hotplug detection that distinguishes ordinary USB devices from real video
+  cameras.
 - Mock bridge for non-Android development and tests.
 
 The native recorder uses Android Camera2. It works when the board exposes the
