@@ -5,11 +5,15 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import com.example.xiangji.bridge.CameraBridgeEventBus
+import com.example.xiangji.camera.Camera2SegmentRecorder
 
 class CameraStreamService : Service() {
+    private var recorder: Camera2SegmentRecorder? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -23,26 +27,33 @@ class CameraStreamService : Service() {
             2000,
         ) ?: 2000
 
-        startForeground(
-            NOTIFICATION_ID,
-            buildNotification(streamId, fragmentDurationMs),
-        )
+        startCameraForeground(streamId, fragmentDurationMs)
 
         CameraBridgeEventBus.status(
-            phase = "streaming",
-            message = "Camera foreground service is running.",
+            phase = "starting",
+            message = "Camera foreground service is starting recorder.",
         )
         CameraBridgeEventBus.log(
             level = "info",
             message = "CameraStreamService started for $deviceId, stream=$streamId, fragment=${fragmentDurationMs}ms.",
         )
 
-        // Wire the concrete UVC backend here. It should write each encoded
-        // segment to app storage, then call CameraBridgeEventBus.segment(...).
+        recorder?.stop()
+        recorder = Camera2SegmentRecorder(applicationContext).also { recorder ->
+            recorder.start(
+                Camera2SegmentRecorder.RecorderConfig(
+                    deviceId = deviceId,
+                    streamId = streamId,
+                    fragmentDurationMs = fragmentDurationMs.coerceAtLeast(500),
+                ),
+            )
+        }
         return START_STICKY
     }
 
     override fun onDestroy() {
+        recorder?.stop()
+        recorder = null
         CameraBridgeEventBus.status(
             phase = "idle",
             message = "Camera foreground service stopped.",
@@ -88,6 +99,23 @@ class CameraStreamService : Service() {
             .setContentText("Stream $streamId, ${fragmentDurationMs}ms fragments")
             .setOngoing(true)
             .build()
+    }
+
+    private fun startCameraForeground(
+        streamId: String,
+        fragmentDurationMs: Int,
+    ) {
+        val notification = buildNotification(streamId, fragmentDurationMs)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     companion object {

@@ -1,10 +1,12 @@
 package com.example.xiangji.bridge
 
+import android.Manifest
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
@@ -153,6 +155,19 @@ class UsbCameraBridge(
             return
         }
 
+        if (!hasCameraPermission()) {
+            CameraBridgeEventBus.error(
+                message = "Android camera permission is required.",
+                details = "Grant CAMERA permission before starting the recorder.",
+            )
+            result.error(
+                "camera_permission_missing",
+                "Android camera permission is required.",
+                null,
+            )
+            return
+        }
+
         val intent = Intent(appContext, CameraStreamService::class.java).apply {
             putExtra(CameraStreamService.EXTRA_DEVICE_ID, deviceId)
             putExtra(CameraStreamService.EXTRA_STREAM_ID, streamId)
@@ -238,6 +253,12 @@ class UsbCameraBridge(
             }
         }
         return false
+    }
+
+    private fun hasCameraPermission(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+            appContext.checkSelfPermission(Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun UsbDevice.displayName(): String {

@@ -280,10 +280,10 @@ class XiangjiSessionController extends ChangeNotifier {
           fragmentDurationMs: fragmentDurationMs,
         ),
       );
-      _phase = SessionPhase.streaming;
-      _statusMessage = 'Streaming from ${device.deviceName}.';
+      _phase = SessionPhase.starting;
+      _statusMessage = 'Start command sent to ${device.deviceName}.';
       _appendLog(
-        'Session started for ${device.deviceName}.',
+        'Start command sent for ${device.deviceName}. Waiting for recorder status.',
         LogLevel.info,
         topic: LogTopic.session,
       );
