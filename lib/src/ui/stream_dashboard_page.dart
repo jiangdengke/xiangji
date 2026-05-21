@@ -152,7 +152,10 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                     : Icons.videocam_off,
                 label: '摄像头',
                 value: controller.hasVideoCamera
-                    ? controller.videoCameraCount.toString()
+                    ? controller.selectedVideoCameraCount ==
+                              controller.videoCameraCount
+                          ? controller.videoCameraCount.toString()
+                          : '${controller.selectedVideoCameraCount}/${controller.videoCameraCount}'
                     : '无',
               ),
               _StatTile(
@@ -190,11 +193,12 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
   }
 
   Widget _controlsSection(BuildContext context) {
-    final selectedDevice = controller.selectedDevice;
     return _Section(
       title: '控制',
       subtitle: controller.lastError.isEmpty
-          ? '操作当前选中的 USB 摄像头。'
+          ? controller.hasSelectedVideoCamera
+                ? '当前已选中 ${controller.selectedVideoCameraCount} 路摄像头。'
+                : '请先在下方勾选至少一路视频摄像头。'
           : controller.lastError,
       child: Wrap(
         spacing: 12,
@@ -212,11 +216,25 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
             label: const Text('停止'),
           ),
           OutlinedButton.icon(
-            onPressed: selectedDevice == null || !selectedDevice.videoClass
-                ? null
-                : controller.requestPermission,
+            onPressed: controller.hasSelectedVideoCamera
+                ? controller.requestPermission
+                : null,
             icon: const Icon(Icons.lock_open),
             label: const Text('权限'),
+          ),
+          OutlinedButton.icon(
+            onPressed: controller.hasVideoCamera
+                ? controller.selectAllVideoDevices
+                : null,
+            icon: const Icon(Icons.select_all),
+            label: const Text('全选'),
+          ),
+          OutlinedButton.icon(
+            onPressed: controller.hasSelectedVideoCamera
+                ? controller.clearSelectedDevices
+                : null,
+            icon: const Icon(Icons.clear),
+            label: const Text('清空'),
           ),
           OutlinedButton.icon(
             onPressed: controller.refreshDevices,
@@ -232,7 +250,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
     return _Section(
       title: '上传地址',
       subtitle: controller.isEndpointValid
-          ? '上传器会把每个分片作为原始 MP4 请求体发送。'
+          ? '上传器会把每路摄像头的分片作为原始 MP4 请求体发送。'
           : '开始前请输入有效的 HTTP 或 HTTPS 地址。',
       child: Column(
         children: <Widget>[
@@ -288,20 +306,27 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
       subtitle: devices.isEmpty
           ? '桥接层当前没有看到 USB 设备。'
           : controller.hasVideoCamera
-          ? '已检测到 ${controller.videoCameraCount} 个摄像头。'
+          ? '检测到 ${controller.videoCameraCount} 个摄像头，已选 ${controller.selectedVideoCameraCount} 个。'
           : '检测到 USB 设备，但没有视频摄像头。',
       child: devices.isEmpty
           ? const Text('未检测到可用摄像头。')
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: devices
                   .map((UsbCameraDevice device) {
-                    final selected =
-                        controller.selectedDeviceId == device.deviceId;
+                    final selected = controller.isDeviceSelected(
+                      device.deviceId,
+                    );
+                    final selectable = device.videoClass;
                     final scheme = Theme.of(context).colorScheme;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: InkWell(
-                        onTap: () => controller.selectDevice(device.deviceId),
+                        onTap: selectable
+                            ? () => controller.toggleDeviceSelection(
+                                device.deviceId,
+                              )
+                            : null,
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
                           decoration: BoxDecoration(
@@ -318,6 +343,18 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                           padding: const EdgeInsets.all(12),
                           child: Row(
                             children: <Widget>[
+                              Checkbox(
+                                value: selected,
+                                onChanged: selectable
+                                    ? (bool? value) {
+                                        controller.setDeviceSelected(
+                                          device.deviceId,
+                                          value ?? false,
+                                        );
+                                      }
+                                    : null,
+                              ),
+                              const SizedBox(width: 8),
                               Icon(
                                 device.videoClass ? Icons.videocam : Icons.usb,
                                 color: selected
@@ -340,6 +377,8 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                                       'VID ${device.vendorId.toRadixString(16).padLeft(4, '0')} '
                                       'PID ${device.productId.toRadixString(16).padLeft(4, '0')} '
                                       'IF ${device.interfaceCount}',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ],
                                 ),
@@ -351,7 +390,18 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                                 children: <Widget>[
                                   Chip(
                                     label: Text(
-                                      device.videoClass ? '摄像头' : 'USB',
+                                      device.videoClass ? '摄像头' : '非摄像头',
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Chip(
+                                    label: Text(
+                                      device.videoClass
+                                          ? selected
+                                                ? '已选'
+                                                : '未选'
+                                          : '跳过',
                                     ),
                                     visualDensity: VisualDensity.compact,
                                   ),
@@ -483,7 +533,7 @@ class _ProcessFlow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedDevice = controller.selectedDevice;
+    final selectedDevices = controller.selectedVideoDevices;
     final steps = <_FlowStep>[
       _FlowStep(
         icon: Icons.usb,
@@ -494,14 +544,14 @@ class _ProcessFlow extends StatelessWidget {
       _FlowStep(
         icon: Icons.lock_open,
         label: '权限',
-        value: _permissionValue(selectedDevice),
-        state: _permissionState(selectedDevice),
+        value: _permissionValue(selectedDevices),
+        state: _permissionState(selectedDevices),
       ),
       _FlowStep(
         icon: Icons.videocam,
         label: '视频',
         value: _videoValue(),
-        state: _videoState(selectedDevice),
+        state: _videoState(selectedDevices),
       ),
       _FlowStep(
         icon: Icons.cloud_upload,
@@ -535,9 +585,7 @@ class _ProcessFlow extends StatelessWidget {
       return '未连接';
     }
     if (controller.hasVideoCamera) {
-      return controller.usbDeviceCount == controller.videoCameraCount
-          ? '${controller.videoCameraCount} 个摄像头'
-          : '${controller.videoCameraCount} 个摄像头，${controller.usbDeviceCount} 个 USB 设备';
+      return '${controller.selectedVideoCameraCount}/${controller.videoCameraCount} 已选';
     }
     return '无摄像头';
   }
@@ -549,8 +597,11 @@ class _ProcessFlow extends StatelessWidget {
     if (controller.phase == SessionPhase.discovering) {
       return _FlowState.active;
     }
-    if (controller.hasVideoCamera) {
+    if (controller.hasSelectedVideoCamera) {
       return _FlowState.done;
+    }
+    if (controller.hasVideoCamera) {
+      return _FlowState.idle;
     }
     if (controller.hasUsbDevices) {
       return _FlowState.idle;
@@ -558,46 +609,55 @@ class _ProcessFlow extends StatelessWidget {
     return _FlowState.blocked;
   }
 
-  String _permissionValue(UsbCameraDevice? selectedDevice) {
-    if (selectedDevice == null) {
-      return '无设备';
-    }
-    if (!selectedDevice.videoClass) {
-      return '非摄像头';
+  String _permissionValue(List<UsbCameraDevice> selectedDevices) {
+    if (selectedDevices.isEmpty) {
+      return '未选择';
     }
     if (controller.phase == SessionPhase.permissionRequested) {
       return '请求中';
     }
-    return selectedDevice.permissionGranted ? '已授权' : '需要';
+    final pendingCount = selectedDevices.where((UsbCameraDevice device) {
+      return !device.permissionGranted;
+    }).length;
+    if (pendingCount == 0) {
+      return '全部已授权';
+    }
+    return '$pendingCount 个待授权';
   }
 
-  _FlowState _permissionState(UsbCameraDevice? selectedDevice) {
+  _FlowState _permissionState(List<UsbCameraDevice> selectedDevices) {
     if (controller.phase == SessionPhase.permissionRequested) {
       return _FlowState.active;
     }
-    if (selectedDevice == null) {
+    if (selectedDevices.isEmpty) {
       return _FlowState.blocked;
     }
-    if (!selectedDevice.videoClass) {
-      return _FlowState.idle;
+    final allGranted = selectedDevices.every((UsbCameraDevice device) {
+      return device.permissionGranted;
+    });
+    if (allGranted) {
+      return _FlowState.done;
     }
-    return selectedDevice.permissionGranted ? _FlowState.done : _FlowState.idle;
+    return _FlowState.idle;
   }
 
   String _videoValue() {
     if (!controller.hasVideoCamera) {
       return '无摄像头';
     }
+    if (!controller.hasSelectedVideoCamera) {
+      return '未选择';
+    }
     return switch (controller.phase) {
       SessionPhase.starting => '启动中',
       SessionPhase.streaming => '录制中',
       SessionPhase.stopping => '停止中',
       SessionPhase.error => '错误',
-      _ => '已停止',
+      _ => '${controller.selectedVideoCameraCount} 路待启动',
     };
   }
 
-  _FlowState _videoState(UsbCameraDevice? selectedDevice) {
+  _FlowState _videoState(List<UsbCameraDevice> selectedDevices) {
     if (controller.phase == SessionPhase.error) {
       return _FlowState.error;
     }
@@ -608,7 +668,12 @@ class _ProcessFlow extends StatelessWidget {
     if (!controller.hasVideoCamera) {
       return _FlowState.idle;
     }
-    if (selectedDevice?.permissionGranted ?? false) {
+    if (selectedDevices.isEmpty) {
+      return _FlowState.blocked;
+    }
+    if (selectedDevices.every((UsbCameraDevice device) {
+      return device.permissionGranted;
+    })) {
       return _FlowState.idle;
     }
     return _FlowState.blocked;

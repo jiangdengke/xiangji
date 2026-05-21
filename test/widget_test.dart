@@ -32,6 +32,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('控制'), findsOneWidget);
+    expect(find.text('全选'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('上传地址'),
@@ -42,7 +43,16 @@ void main() {
 
     expect(find.text('上传地址'), findsOneWidget);
     expect(find.text('USB 设备'), findsWidgets);
-    expect(find.text('模拟 UVC 摄像头'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('模拟 UVC 摄像头 1'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('模拟 UVC 摄像头 1'), findsOneWidget);
+    expect(find.text('模拟 UVC 摄像头 2'), findsOneWidget);
   });
 }
 

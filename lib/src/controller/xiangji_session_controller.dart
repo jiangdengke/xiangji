@@ -39,7 +39,8 @@ class XiangjiSessionController extends ChangeNotifier {
   String _statusMessage = '等待 USB 摄像头。';
   String _lastError = '';
   List<UsbCameraDevice> _devices = <UsbCameraDevice>[];
-  String? _selectedDeviceId;
+  final Set<String> _selectedDeviceIds = <String>{};
+  bool _selectionInitialized = false;
   int _uploadedSegments = 0;
   int _failedSegments = 0;
   int _pendingUploadCount = 0;
@@ -64,19 +65,22 @@ class XiangjiSessionController extends ChangeNotifier {
   int get videoCameraCount => _devices.where((UsbCameraDevice device) {
     return device.videoClass;
   }).length;
-  String? get selectedDeviceId => _selectedDeviceId;
-  UsbCameraDevice? get selectedDevice {
-    final id = _selectedDeviceId;
-    if (id == null) {
-      return null;
-    }
-    for (final device in _devices) {
-      if (device.deviceId == id) {
-        return device;
-      }
-    }
-    return null;
-  }
+  Set<String> get selectedDeviceIds =>
+      Set<String>.unmodifiable(_selectedDeviceIds);
+  List<UsbCameraDevice> get selectedDevices => _devices
+      .where((UsbCameraDevice device) {
+        return _selectedDeviceIds.contains(device.deviceId);
+      })
+      .toList(growable: false);
+  List<UsbCameraDevice> get selectedVideoDevices => selectedDevices
+      .where((UsbCameraDevice device) => device.videoClass)
+      .toList(growable: false);
+  int get selectedVideoCameraCount => selectedVideoDevices.length;
+  bool get hasSelectedVideoCamera => selectedVideoCameraCount > 0;
+  String? get selectedDeviceId =>
+      _selectedDeviceIds.isEmpty ? null : _selectedDeviceIds.first;
+  UsbCameraDevice? get selectedDevice =>
+      selectedVideoDevices.isEmpty ? null : selectedVideoDevices.first;
 
   int get uploadedSegments => _uploadedSegments;
   int get failedSegments => _failedSegments;
@@ -100,9 +104,7 @@ class XiangjiSessionController extends ChangeNotifier {
   }
 
   bool get canStart {
-    final device = selectedDevice;
-    return device != null &&
-        device.videoClass &&
+    return hasSelectedVideoCamera &&
         phase != SessionPhase.starting &&
         phase != SessionPhase.stopping &&
         !isUploading &&
@@ -152,6 +154,7 @@ class XiangjiSessionController extends ChangeNotifier {
       _appendLog(inventoryMessage, LogLevel.info, topic: LogTopic.device);
       _lastError = '';
       notifyListeners();
+      _maybeStartAfterPermission();
     } catch (error, stackTrace) {
       _phase = SessionPhase.error;
       _lastError = error.toString();
@@ -166,17 +169,81 @@ class XiangjiSessionController extends ChangeNotifier {
     }
   }
 
+  bool isDeviceSelected(String deviceId) {
+    return _selectedDeviceIds.contains(deviceId);
+  }
+
   void selectDevice(String deviceId) {
-    if (_selectedDeviceId == deviceId) {
+    setDeviceSelected(deviceId, true);
+  }
+
+  void toggleDeviceSelection(String deviceId) {
+    setDeviceSelected(deviceId, !_selectedDeviceIds.contains(deviceId));
+  }
+
+  void setDeviceSelected(String deviceId, bool selected) {
+    final device = _deviceById(deviceId);
+    if (device == null) {
+      _appendLog(
+        '找不到要选择的 USB 设备：$deviceId。',
+        LogLevel.warning,
+        topic: LogTopic.device,
+      );
       return;
     }
-    _selectedDeviceId = deviceId;
-    final device = selectedDevice;
+    if (!device.videoClass) {
+      _appendLog(
+        '${device.deviceName} 不是视频摄像头，不能加入录制列表。',
+        LogLevel.warning,
+        topic: LogTopic.device,
+      );
+      return;
+    }
+
+    _selectionInitialized = true;
+    final changed = selected
+        ? _selectedDeviceIds.add(deviceId)
+        : _selectedDeviceIds.remove(deviceId);
+    if (!changed) {
+      return;
+    }
+
     _appendLog(
-      device == null ? '已选择的设备已移除。' : '已选择 ${device.deviceName}。',
+      selected ? '已选择 ${device.deviceName}。' : '已取消选择 ${device.deviceName}。',
       LogLevel.info,
       topic: LogTopic.device,
     );
+    notifyListeners();
+    _maybeStartAfterPermission();
+  }
+
+  void selectAllVideoDevices() {
+    final videoDeviceIds = _devices
+        .where((UsbCameraDevice device) => device.videoClass)
+        .map((UsbCameraDevice device) => device.deviceId)
+        .toSet();
+    _selectionInitialized = true;
+    _selectedDeviceIds
+      ..clear()
+      ..addAll(videoDeviceIds);
+    _appendLog(
+      videoDeviceIds.isEmpty
+          ? '没有可选的视频摄像头。'
+          : '已选择全部 ${videoDeviceIds.length} 个视频摄像头。',
+      videoDeviceIds.isEmpty ? LogLevel.warning : LogLevel.info,
+      topic: LogTopic.device,
+    );
+    notifyListeners();
+    _maybeStartAfterPermission();
+  }
+
+  void clearSelectedDevices() {
+    if (_selectedDeviceIds.isEmpty) {
+      return;
+    }
+    _selectionInitialized = true;
+    _selectedDeviceIds.clear();
+    _appendLog('已清空摄像头选择。', LogLevel.info, topic: LogTopic.device);
     notifyListeners();
   }
 
@@ -197,59 +264,53 @@ class XiangjiSessionController extends ChangeNotifier {
   }
 
   Future<void> requestPermission() async {
-    final device = selectedDevice;
-    if (device == null) {
+    final selectedCameras = selectedVideoDevices;
+    if (selectedCameras.isEmpty) {
       _appendLog(
-        '还没有选择 USB 摄像头。',
+        '还没有选择要录制的 USB 摄像头。',
         LogLevel.warning,
         topic: LogTopic.permission,
       );
       return;
     }
 
-    if (!device.videoClass) {
+    final pendingDevices = selectedCameras
+        .where((UsbCameraDevice device) => !device.permissionGranted)
+        .toList(growable: false);
+    if (pendingDevices.isEmpty) {
       _appendLog(
-        '当前选择的 USB 设备不是视频摄像头。',
-        LogLevel.warning,
+        '当前选中的 ${selectedCameras.length} 路摄像头都已授权。',
+        LogLevel.info,
         topic: LogTopic.permission,
       );
       return;
     }
 
     _phase = SessionPhase.permissionRequested;
-    _statusMessage = '正在请求 ${device.deviceName} 的权限。';
+    _statusMessage = '正在请求 ${pendingDevices.length} 路摄像头的 USB 权限。';
     notifyListeners();
 
-    final granted = await _bridge.requestPermission(device.deviceId);
-    if (granted) {
-      _pendingStartAfterPermission = false;
-      await refreshDevices();
-      return;
+    for (final device in pendingDevices) {
+      final granted = await _bridge.requestPermission(device.deviceId);
+      _appendLog(
+        granted
+            ? '${device.deviceName} 已授权。'
+            : '已发送 ${device.deviceName} 的权限请求。',
+        LogLevel.info,
+        topic: LogTopic.permission,
+      );
     }
 
-    _pendingStartAfterPermission = true;
-    _appendLog(
-      '已发送 ${device.deviceName} 的权限请求。',
-      LogLevel.info,
-      topic: LogTopic.permission,
-    );
+    await refreshDevices();
+    _maybeStartAfterPermission();
     notifyListeners();
   }
 
   Future<void> start() async {
-    final device = selectedDevice;
-    if (device == null) {
+    final selectedCameras = selectedVideoDevices;
+    if (selectedCameras.isEmpty) {
       _appendLog(
-        '开始前请先选择一个 USB 摄像头。',
-        LogLevel.warning,
-        topic: LogTopic.device,
-      );
-      return;
-    }
-
-    if (!device.videoClass) {
-      _appendLog(
-        '当前选择的 USB 设备不是视频摄像头。',
+        '开始前请先选择至少一个 USB 摄像头。',
         LogLevel.warning,
         topic: LogTopic.device,
       );
@@ -272,29 +333,55 @@ class XiangjiSessionController extends ChangeNotifier {
       return;
     }
 
-    if (!device.permissionGranted) {
+    final unauthorizedDevices = selectedCameras
+        .where((UsbCameraDevice device) => !device.permissionGranted)
+        .toList(growable: false);
+    if (unauthorizedDevices.isNotEmpty) {
       _pendingStartAfterPermission = true;
+      _appendLog(
+        '有 ${unauthorizedDevices.length} 路摄像头还没有 USB 权限，先请求权限。',
+        LogLevel.warning,
+        topic: LogTopic.permission,
+      );
       await requestPermission();
       return;
     }
 
     _pendingStartAfterPermission = false;
     _phase = SessionPhase.starting;
-    _statusMessage = '正在从 ${device.deviceName} 开始录制。';
+    _statusMessage = selectedCameras.length == 1
+        ? '正在从 ${selectedCameras.first.deviceName} 开始录制。'
+        : '正在同时启动 ${selectedCameras.length} 路摄像头录制。';
     notifyListeners();
 
     try {
-      await _bridge.startSession(
-        CameraSessionRequest(
-          deviceId: device.deviceId,
-          streamId: _streamIdText,
-          fragmentDurationMs: fragmentDurationMs,
-        ),
-      );
+      for (var index = 0; index < selectedCameras.length; index += 1) {
+        final device = selectedCameras[index];
+        final streamId = _streamIdForDevice(
+          index: index,
+          total: selectedCameras.length,
+        );
+        await _bridge.startSession(
+          CameraSessionRequest(
+            deviceId: device.deviceId,
+            streamId: streamId,
+            fragmentDurationMs: fragmentDurationMs,
+          ),
+        );
+        _appendLog(
+          '已向 ${device.deviceName} 发送开始指令，流 ID：$streamId。',
+          LogLevel.info,
+          topic: LogTopic.session,
+        );
+      }
       _phase = SessionPhase.starting;
-      _statusMessage = '已向 ${device.deviceName} 发送开始指令。';
+      _statusMessage = selectedCameras.length == 1
+          ? '已向 ${selectedCameras.first.deviceName} 发送开始指令。'
+          : '已向 ${selectedCameras.length} 路摄像头发送开始指令。';
       _appendLog(
-        '已向 ${device.deviceName} 发送开始指令，等待录制器状态。',
+        selectedCameras.length == 1
+            ? '等待录制器状态。'
+            : '等待 ${selectedCameras.length} 路录制器状态。',
         LogLevel.info,
         topic: LogTopic.session,
       );
@@ -317,14 +404,14 @@ class XiangjiSessionController extends ChangeNotifier {
   Future<void> stop() async {
     _pendingStartAfterPermission = false;
     _phase = SessionPhase.stopping;
-    _statusMessage = '正在停止录制。';
+    _statusMessage = '正在停止全部录制。';
     notifyListeners();
 
     try {
       await _bridge.stopSession();
       _phase = _devices.isEmpty ? SessionPhase.idle : SessionPhase.ready;
-      _statusMessage = '录制已停止。';
-      _appendLog('录制已停止。', LogLevel.info, topic: LogTopic.session);
+      _statusMessage = '全部录制已停止。';
+      _appendLog('全部录制已停止。', LogLevel.info, topic: LogTopic.session);
       notifyListeners();
     } catch (error, stackTrace) {
       _phase = SessionPhase.error;
@@ -370,18 +457,16 @@ class XiangjiSessionController extends ChangeNotifier {
         _enqueueSegment(segment);
         break;
       case CameraPermissionEvent(:final deviceId, :final granted):
+        if (!granted && _selectedDeviceIds.contains(deviceId)) {
+          _pendingStartAfterPermission = false;
+        }
         _appendLog(
           granted ? '$deviceId 已授权。' : '$deviceId 权限被拒绝。',
           granted ? LogLevel.info : LogLevel.warning,
           topic: LogTopic.permission,
         );
         await refreshDevices();
-        if (granted &&
-            _pendingStartAfterPermission &&
-            _selectedDeviceId == deviceId) {
-          _pendingStartAfterPermission = false;
-          unawaited(start());
-        }
+        _maybeStartAfterPermission();
         break;
       case CameraLogEvent(:final level, :final message):
         _appendLog(message, level, topic: LogTopic.system);
@@ -404,24 +489,60 @@ class XiangjiSessionController extends ChangeNotifier {
   void _replaceDevices(List<UsbCameraDevice> devices) {
     _devices = List<UsbCameraDevice>.unmodifiable(devices);
     if (_devices.isEmpty) {
-      _selectedDeviceId = null;
+      _selectedDeviceIds.clear();
       return;
     }
 
-    final currentSelectedExists =
-        _selectedDeviceId != null &&
-        _devices.any((UsbCameraDevice device) {
-          return device.deviceId == _selectedDeviceId;
-        });
-    if (currentSelectedExists) {
+    final selectableDeviceIds = _devices
+        .where((UsbCameraDevice device) => device.videoClass)
+        .map((UsbCameraDevice device) => device.deviceId)
+        .toSet();
+    _selectedDeviceIds.removeWhere((String deviceId) {
+      return !selectableDeviceIds.contains(deviceId);
+    });
+
+    if (!_selectionInitialized) {
+      final videoDeviceIds = selectableDeviceIds.toList(growable: false);
+      if (videoDeviceIds.isNotEmpty) {
+        _selectedDeviceIds
+          ..clear()
+          ..addAll(videoDeviceIds);
+        _selectionInitialized = true;
+      }
+    }
+  }
+
+  UsbCameraDevice? _deviceById(String deviceId) {
+    for (final device in _devices) {
+      if (device.deviceId == deviceId) {
+        return device;
+      }
+    }
+    return null;
+  }
+
+  void _maybeStartAfterPermission() {
+    if (!_pendingStartAfterPermission || _disposed) {
+      return;
+    }
+    if (_phase == SessionPhase.starting ||
+        _phase == SessionPhase.streaming ||
+        _phase == SessionPhase.stopping) {
       return;
     }
 
-    final preferredDevice = _devices.firstWhere(
-      (UsbCameraDevice device) => device.videoClass,
-      orElse: () => _devices.first,
-    );
-    _selectedDeviceId = preferredDevice.deviceId;
+    final selectedCameras = selectedVideoDevices;
+    if (selectedCameras.isEmpty) {
+      return;
+    }
+    if (selectedCameras.any((UsbCameraDevice device) {
+      return !device.permissionGranted;
+    })) {
+      return;
+    }
+
+    _pendingStartAfterPermission = false;
+    unawaited(start());
   }
 
   String _inventoryMessage() {
@@ -453,12 +574,27 @@ class XiangjiSessionController extends ChangeNotifier {
     };
   }
 
+  String _streamIdForDevice({required int index, required int total}) {
+    final base = _streamIdText.trim().isEmpty ? 'camera-001' : _streamIdText;
+    if (total <= 1) {
+      return base;
+    }
+    return '$base-${(index + 1).toString().padLeft(2, '0')}';
+  }
+
+  String _segmentLabel(CameraSegment segment) {
+    final camera = segment.cameraId.isEmpty
+        ? segment.deviceId
+        : 'Camera2 ${segment.cameraId}';
+    return '[${segment.streamId}][$camera]';
+  }
+
   void _enqueueSegment(CameraSegment segment) {
     _pendingSegments.add(_QueuedSegment(segment: segment, attempts: 0));
     _pendingUploadCount = _pendingSegments.length;
     _lastSegmentAt = segment.capturedAt;
     _appendLog(
-      '分片 ${segment.segmentId} 已加入上传队列（${segment.byteLength} 字节）。',
+      '${_segmentLabel(segment)} 分片 ${segment.segmentId} 已加入上传队列（${segment.byteLength} 字节）。',
       LogLevel.debug,
       topic: LogTopic.upload,
     );
@@ -500,7 +636,7 @@ class XiangjiSessionController extends ChangeNotifier {
           _uploadedSegments += 1;
           _lastUploadAt = DateTime.now();
           _appendLog(
-            '分片 ${queued.segment.segmentId} 已上传，HTTP ${receipt.statusCode}。',
+            '${_segmentLabel(queued.segment)} 分片 ${queued.segment.segmentId} 已上传，HTTP ${receipt.statusCode}。',
             LogLevel.info,
             topic: LogTopic.upload,
           );
@@ -518,7 +654,7 @@ class XiangjiSessionController extends ChangeNotifier {
             _pendingUploadCount = _pendingSegments.length;
             _failedSegments += 1;
             _appendLog(
-              '分片 ${queued.segment.segmentId} 连续 3 次上传失败，已丢弃。',
+              '${_segmentLabel(queued.segment)} 分片 ${queued.segment.segmentId} 连续 3 次上传失败，已丢弃。',
               LogLevel.error,
               topic: LogTopic.upload,
               details: error,
@@ -526,7 +662,7 @@ class XiangjiSessionController extends ChangeNotifier {
             notifyListeners();
           } else {
             _appendLog(
-              '分片 ${queued.segment.segmentId} 上传失败，稍后重试。',
+              '${_segmentLabel(queued.segment)} 分片 ${queued.segment.segmentId} 上传失败，稍后重试。',
               LogLevel.warning,
               topic: LogTopic.upload,
               details: stackTrace,

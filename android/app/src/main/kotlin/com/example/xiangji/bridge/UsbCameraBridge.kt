@@ -26,7 +26,7 @@ class UsbCameraBridge(
     private val methodChannel = MethodChannel(messenger, METHOD_CHANNEL)
     private val eventChannel = EventChannel(messenger, EVENT_CHANNEL)
     private var receiverRegistered = false
-    private var activeStreamDeviceId: String? = null
+    private val activeStreamDeviceIds = mutableSetOf<String>()
 
     private val usbStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -57,15 +57,18 @@ class UsbCameraBridge(
             reason = if (granted) "权限已授予" else "权限被拒绝",
             announceStatus = true,
         )
-        if (granted) {
-            CameraBridgeEventBus.status(
-                phase = "ready",
-                message = "USB 权限已授予。",
-            )
-        } else {
+        if (!granted) {
             CameraBridgeEventBus.error(
                 message = "USB 权限被拒绝。",
                 details = deviceId,
+            )
+            return
+        }
+
+        if (activeStreamDeviceIds.isEmpty()) {
+            CameraBridgeEventBus.status(
+                phase = "ready",
+                message = "USB 权限已授予。",
             )
         }
     }
@@ -75,22 +78,27 @@ class UsbCameraBridge(
         device: UsbDevice?,
     ) {
         val deviceId = device?.deviceName.orEmpty()
-        val cameraRemoved = action == "detached" && deviceId == activeStreamDeviceId
+        val cameraRemoved = action == "detached" && activeStreamDeviceIds.contains(deviceId)
 
         if (cameraRemoved) {
+            activeStreamDeviceIds.remove(deviceId)
             CameraBridgeEventBus.log(
                 level = "error",
-                message = "正在录制的 USB 摄像头已拔出：$deviceId。",
+                message = "正在录制的一路 USB 摄像头已拔出：$deviceId。",
             )
-            appContext.stopService(Intent(appContext, CameraStreamService::class.java))
-            activeStreamDeviceId = null
+            runCatching {
+                appContext.startService(
+                    CameraStreamService.stopDeviceIntent(appContext, deviceId),
+                )
+            }.onFailure { error ->
+                CameraBridgeEventBus.log(
+                    level = "warning",
+                    message = "停止已拔出摄像头服务失败：${error.message}",
+                )
+            }
             publishInventorySnapshot(
                 reason = "录制中摄像头拔出",
                 announceStatus = false,
-            )
-            CameraBridgeEventBus.status(
-                phase = "error",
-                message = "录制中 USB 摄像头已拔出。",
             )
             return
         }
@@ -121,7 +129,7 @@ class UsbCameraBridge(
             message = "$reason：$summary",
         )
 
-        if (!announceStatus || activeStreamDeviceId != null) {
+        if (!announceStatus || activeStreamDeviceIds.isNotEmpty()) {
             return
         }
 
@@ -257,20 +265,19 @@ class UsbCameraBridge(
             return
         }
 
-        val intent = Intent(appContext, CameraStreamService::class.java).apply {
-            putExtra(CameraStreamService.EXTRA_DEVICE_ID, deviceId)
-            putExtra(CameraStreamService.EXTRA_STREAM_ID, streamId)
-            putExtra(
-                CameraStreamService.EXTRA_FRAGMENT_DURATION_MS,
-                fragmentDurationMs,
-            )
-        }
+        val nextActiveCount = activeStreamDeviceIds.plus(deviceId).size
+        val intent = CameraStreamService.startIntent(
+            context = appContext,
+            deviceId = deviceId,
+            streamId = streamId,
+            fragmentDurationMs = fragmentDurationMs,
+        )
 
         CameraBridgeEventBus.status(
             phase = "starting",
-            message = "正在启动摄像头前台服务。",
+            message = "正在启动 ${device.displayName()}，当前将录制 $nextActiveCount 路摄像头。",
         )
-        activeStreamDeviceId = deviceId
+        activeStreamDeviceIds.add(deviceId)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             appContext.startForegroundService(intent)
         } else {
@@ -284,7 +291,7 @@ class UsbCameraBridge(
             phase = "stopping",
             message = "正在停止摄像头前台服务。",
         )
-        activeStreamDeviceId = null
+        activeStreamDeviceIds.clear()
         appContext.stopService(Intent(appContext, CameraStreamService::class.java))
         result.success(null)
     }

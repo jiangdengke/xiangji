@@ -9,29 +9,42 @@ import 'package:xiangji/src/domain.dart';
 import 'package:xiangji/src/upload/segment_uploader.dart';
 
 void main() {
-  test('controller uploads segments emitted by the bridge', () async {
-    final bridge = _TestBridge();
-    final uploader = _RecordingUploader();
-    final controller = XiangjiSessionController(
-      bridge: bridge,
-      uploader: uploader,
-      endpointText: 'http://127.0.0.1:8080/api/camera/segments',
-      streamIdText: 'unit-stream',
-      fragmentDurationText: '2000',
-    );
+  test(
+    'controller uploads segments emitted by multiple camera sessions',
+    () async {
+      final bridge = _TestBridge();
+      final uploader = _RecordingUploader();
+      final controller = XiangjiSessionController(
+        bridge: bridge,
+        uploader: uploader,
+        endpointText: 'http://127.0.0.1:8080/api/camera/segments',
+        streamIdText: 'unit-stream',
+        fragmentDurationText: '2000',
+      );
 
-    await controller.initialize();
-    await controller.start();
+      await controller.initialize();
+      expect(controller.selectedVideoCameraCount, 2);
 
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+      await controller.start();
 
-    expect(controller.phase, SessionPhase.streaming);
-    expect(controller.uploadedSegments, 1);
-    expect(uploader.uploads, hasLength(1));
-    expect(uploader.uploads.single.segment.streamId, 'unit-stream');
+      await Future<void>.delayed(const Duration(milliseconds: 200));
 
-    controller.dispose();
-  });
+      expect(controller.phase, SessionPhase.streaming);
+      expect(bridge.startRequests, hasLength(2));
+      expect(controller.uploadedSegments, 2);
+      expect(uploader.uploads, hasLength(2));
+      expect(
+        uploader.uploads.map((_UploadCall upload) => upload.segment.deviceId),
+        containsAll(<String>['usb-1', 'usb-2']),
+      );
+      expect(
+        uploader.uploads.map((_UploadCall upload) => upload.segment.streamId),
+        containsAll(<String>['unit-stream-01', 'unit-stream-02']),
+      );
+
+      controller.dispose();
+    },
+  );
 
   test('controller distinguishes USB devices from video cameras', () async {
     final bridge = _TestBridge(
@@ -70,9 +83,18 @@ class _TestBridge implements CameraBridge {
           const <UsbCameraDevice>[
             UsbCameraDevice(
               deviceId: 'usb-1',
-              deviceName: 'Unit Test Camera',
+              deviceName: 'Unit Test Camera 1',
               vendorId: 1,
               productId: 2,
+              permissionGranted: true,
+              videoClass: true,
+              interfaceCount: 1,
+            ),
+            UsbCameraDevice(
+              deviceId: 'usb-2',
+              deviceName: 'Unit Test Camera 2',
+              vendorId: 1,
+              productId: 3,
               permissionGranted: true,
               videoClass: true,
               interfaceCount: 1,
@@ -82,6 +104,7 @@ class _TestBridge implements CameraBridge {
   final StreamController<CameraBridgeEvent> _events =
       StreamController<CameraBridgeEvent>.broadcast();
   final List<UsbCameraDevice> _devices;
+  final List<CameraSessionRequest> startRequests = <CameraSessionRequest>[];
 
   @override
   Stream<CameraBridgeEvent> get events => _events.stream;
@@ -99,6 +122,8 @@ class _TestBridge implements CameraBridge {
 
   @override
   Future<void> startSession(CameraSessionRequest request) async {
+    startRequests.add(request);
+    final sequence = startRequests.length;
     final file = File(
       '${Directory.systemTemp.path}/xiangji_test_${DateTime.now().microsecondsSinceEpoch}.mp4',
     );
@@ -111,11 +136,12 @@ class _TestBridge implements CameraBridge {
     _events.add(
       CameraSegmentReadyEvent(
         CameraSegment(
-          segmentId: 'segment-1',
+          segmentId: 'segment-$sequence',
           deviceId: request.deviceId,
+          cameraId: 'test-camera-${request.deviceId}',
           streamId: request.streamId,
           filePath: file.path,
-          sequence: 1,
+          sequence: sequence,
           durationMs: request.fragmentDurationMs,
           byteLength: payload.length,
           capturedAt: DateTime.now(),

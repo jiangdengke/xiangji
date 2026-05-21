@@ -63,10 +63,10 @@ class Camera2SegmentRecorder(
     private var pendingRotate = false
     private var segmentSequence = 0
 
-    fun start(config: RecorderConfig) {
+    fun start(config: RecorderConfig): Boolean {
         if (!running.compareAndSet(false, true)) {
             CameraBridgeEventBus.log("warning", "录制器已经在运行。")
-            return
+            return false
         }
 
         this.config = config
@@ -77,17 +77,23 @@ class Camera2SegmentRecorder(
                     details = "授予 CAMERA 权限后才能开始 Camera2 录制。",
                 )
                 running.set(false)
-                return
+                return false
             }
 
-            val selectedCamera = selectCamera()
+            val selectedCamera = selectCamera(config.cameraId)
             if (selectedCamera == null) {
                 CameraBridgeEventBus.error(
-                    message = "没有可用于录制的 Camera2 摄像头。",
-                    details = "如果 USB 摄像头只显示为 /dev/video*，这个板子仍然需要 libuvc 后端。",
+                    message = if (config.cameraId.isNullOrBlank()) {
+                        "没有可用于录制的 Camera2 摄像头。"
+                    } else {
+                        "指定的 Camera2 摄像头不可用。"
+                    },
+                    details = config.cameraId?.let { cameraId ->
+                        "cameraId=$cameraId。请确认该摄像头仍在 Camera2 列表中。"
+                    } ?: "如果 USB 摄像头只显示为 /dev/video*，这个板子仍然需要 libuvc 后端。",
                 )
                 running.set(false)
-                return
+                return false
             }
 
             val cameraId = selectedCamera.cameraId
@@ -98,18 +104,33 @@ class Camera2SegmentRecorder(
 
             CameraBridgeEventBus.log(
                 level = "info",
-                message = "正在使用 Camera2 摄像头 $cameraId，分辨率 ${size.width}x${size.height}。",
+                message = buildString {
+                    append("正在使用 Camera2 摄像头 ")
+                    append(cameraId)
+                    append(" 录制设备 ")
+                    append(config.deviceId)
+                    append("，分辨率 ")
+                    append(size.width)
+                    append('x')
+                    append(size.height)
+                    if (!config.streamId.isBlank()) {
+                        append("，流 ID ")
+                        append(config.streamId)
+                    }
+                },
             )
 
             prepareEncoder(size)
             startDrainThread()
             openCamera(cameraId)
+            return true
         } catch (error: Throwable) {
             CameraBridgeEventBus.error(
                 message = "启动 Camera2 录制器失败。",
                 details = error.message ?: error.toString(),
             )
             stop()
+            return false
         }
     }
 
@@ -154,7 +175,7 @@ class Camera2SegmentRecorder(
         pendingRotate = false
     }
 
-    private fun selectCamera(): SelectedCamera? {
+    private fun selectCamera(preferredCameraId: String? = null): SelectedCamera? {
         val ids = cameraManager.cameraIdList
         val cameras = ids.mapNotNull { cameraId ->
             runCatching {
@@ -177,6 +198,12 @@ class Camera2SegmentRecorder(
 
         if (cameras.isEmpty()) {
             return null
+        }
+
+        if (!preferredCameraId.isNullOrBlank()) {
+            return cameras.firstOrNull { camera ->
+                camera.cameraId == preferredCameraId
+            }
         }
 
         val external = cameras.firstOrNull { camera ->
@@ -426,7 +453,7 @@ class Camera2SegmentRecorder(
             requestKeyFrame()
             CameraBridgeEventBus.log(
                 level = "debug",
-                message = "已请求下一段 ${config.fragmentDurationMs}ms 分片的关键帧。",
+                message = "Camera2 ${config.cameraId.orEmpty()} 已请求下一段 ${config.fragmentDurationMs}ms 分片的关键帧。",
             )
         }
     }
@@ -460,7 +487,7 @@ class Camera2SegmentRecorder(
 
         CameraBridgeEventBus.log(
             level = "info",
-            message = "已开始分片 ${segmentFile.name}。",
+            message = "Camera2 ${config.cameraId.orEmpty()} 已开始分片 ${segmentFile.name}。",
         )
     }
 
@@ -522,6 +549,7 @@ class Camera2SegmentRecorder(
             mapOf(
                 "segmentId" to segmentFile.nameWithoutExtension,
                 "deviceId" to config.deviceId,
+                "cameraId" to config.cameraId.orEmpty(),
                 "streamId" to config.streamId,
                 "filePath" to segmentFile.absolutePath,
                 "sequence" to sequence,
@@ -532,7 +560,7 @@ class Camera2SegmentRecorder(
         )
         CameraBridgeEventBus.log(
             level = "info",
-            message = "分片 ${segmentFile.name} 已完成（${byteLength} 字节）。",
+            message = "Camera2 ${config.cameraId.orEmpty()} 分片 ${segmentFile.name} 已完成（${byteLength} 字节）。",
         )
     }
 
@@ -589,6 +617,7 @@ class Camera2SegmentRecorder(
         val deviceId: String,
         val streamId: String,
         val fragmentDurationMs: Int,
+        val cameraId: String? = null,
     )
 
     private data class SelectedCamera(

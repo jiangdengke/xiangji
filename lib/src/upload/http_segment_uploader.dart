@@ -26,6 +26,9 @@ class HttpSegmentUploader implements SegmentUploader {
     request.headers['Content-Type'] = 'video/mp4';
     request.headers['X-Stream-Id'] = segment.streamId;
     request.headers['X-Device-Id'] = segment.deviceId;
+    if (segment.cameraId.isNotEmpty) {
+      request.headers['X-Camera-Id'] = segment.cameraId;
+    }
     request.headers['X-Segment-Id'] = segment.segmentId;
     request.headers['X-Sequence'] = segment.sequence.toString();
     request.headers['X-Duration-Ms'] = segment.durationMs.toString();

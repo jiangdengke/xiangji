@@ -9,9 +9,18 @@ class MockCameraBridge implements CameraBridge {
     : _devices = <UsbCameraDevice>[
         const UsbCameraDevice(
           deviceId: 'mock-camera-0',
-          deviceName: '模拟 UVC 摄像头',
+          deviceName: '模拟 UVC 摄像头 1',
           vendorId: 0x1A2B,
           productId: 0x1001,
+          permissionGranted: true,
+          videoClass: true,
+          interfaceCount: 1,
+        ),
+        const UsbCameraDevice(
+          deviceId: 'mock-camera-1',
+          deviceName: '模拟 UVC 摄像头 2',
+          vendorId: 0x1A2B,
+          productId: 0x1002,
           permissionGranted: true,
           videoClass: true,
           interfaceCount: 1,
@@ -31,7 +40,7 @@ class MockCameraBridge implements CameraBridge {
   final StreamController<CameraBridgeEvent> _eventController;
   final List<UsbCameraDevice> _devices;
   final List<Timer> _timers = <Timer>[];
-  bool _sessionRunning = false;
+  final Set<String> _activeDeviceIds = <String>{};
   int _segmentSequence = 0;
 
   @override
@@ -95,7 +104,7 @@ class MockCameraBridge implements CameraBridge {
       return;
     }
 
-    _sessionRunning = true;
+    _activeDeviceIds.add(request.deviceId);
     _eventController.add(
       CameraStatusEvent(phase: SessionPhase.starting, message: '模拟桥接正在启动录制。'),
     );
@@ -106,12 +115,15 @@ class MockCameraBridge implements CameraBridge {
       ),
     );
     _eventController.add(
-      CameraStatusEvent(phase: SessionPhase.streaming, message: '模拟桥接正在录制。'),
+      CameraStatusEvent(
+        phase: SessionPhase.streaming,
+        message: '模拟桥接正在录制 ${_activeDeviceIds.length} 路摄像头。',
+      ),
     );
 
     for (var index = 0; index < 3; index++) {
       final timer = Timer(Duration(milliseconds: 500 * (index + 1)), () {
-        if (!_sessionRunning) {
+        if (!_activeDeviceIds.contains(request.deviceId)) {
           return;
         }
         unawaited(_emitMockSegment(request));
@@ -137,6 +149,7 @@ class MockCameraBridge implements CameraBridge {
         CameraSegment(
           segmentId: 'mock-segment-$sequence',
           deviceId: request.deviceId,
+          cameraId: 'mock-camera2-${request.deviceId}',
           streamId: request.streamId,
           filePath: segmentFile.path,
           sequence: sequence,
@@ -150,7 +163,7 @@ class MockCameraBridge implements CameraBridge {
 
   @override
   Future<void> stopSession() async {
-    _sessionRunning = false;
+    _activeDeviceIds.clear();
     for (final timer in _timers) {
       timer.cancel();
     }

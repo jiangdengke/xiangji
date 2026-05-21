@@ -101,6 +101,7 @@ class CameraSegment {
   const CameraSegment({
     required this.segmentId,
     required this.deviceId,
+    required this.cameraId,
     required this.streamId,
     required this.filePath,
     required this.sequence,
@@ -111,6 +112,7 @@ class CameraSegment {
 
   final String segmentId;
   final String deviceId;
+  final String cameraId;
   final String streamId;
   final String filePath;
   final int sequence;
@@ -122,6 +124,7 @@ class CameraSegment {
     return CameraSegment(
       segmentId: _stringValue(map['segmentId']),
       deviceId: _stringValue(map['deviceId']),
+      cameraId: _stringValue(map['cameraId']),
       streamId: _stringValue(map['streamId']),
       filePath: _stringValue(map['filePath']),
       sequence: _intValue(map['sequence']),
@@ -135,6 +138,7 @@ class CameraSegment {
     return <String, Object?>{
       'segmentId': segmentId,
       'deviceId': deviceId,
+      'cameraId': cameraId,
       'streamId': streamId,
       'filePath': filePath,
       'sequence': sequence,
