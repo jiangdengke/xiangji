@@ -54,17 +54,17 @@ class UsbCameraBridge(
 
         CameraBridgeEventBus.permission(deviceId, granted)
         publishInventorySnapshot(
-            reason = if (granted) "permission granted" else "permission denied",
+            reason = if (granted) "权限已授予" else "权限被拒绝",
             announceStatus = true,
         )
         if (granted) {
             CameraBridgeEventBus.status(
                 phase = "ready",
-                message = "USB permission granted.",
+                message = "USB 权限已授予。",
             )
         } else {
             CameraBridgeEventBus.error(
-                message = "USB permission denied.",
+                message = "USB 权限被拒绝。",
                 details = deviceId,
             )
         }
@@ -80,17 +80,17 @@ class UsbCameraBridge(
         if (cameraRemoved) {
             CameraBridgeEventBus.log(
                 level = "error",
-                message = "Active USB camera detached: $deviceId.",
+                message = "正在录制的 USB 摄像头已拔出：$deviceId。",
             )
             appContext.stopService(Intent(appContext, CameraStreamService::class.java))
             activeStreamDeviceId = null
             publishInventorySnapshot(
-                reason = "camera detached while streaming",
+                reason = "录制中摄像头拔出",
                 announceStatus = false,
             )
             CameraBridgeEventBus.status(
                 phase = "error",
-                message = "USB camera detached while streaming.",
+                message = "录制中 USB 摄像头已拔出。",
             )
             return
         }
@@ -98,12 +98,12 @@ class UsbCameraBridge(
         if (device != null) {
             CameraBridgeEventBus.log(
                 level = "info",
-                message = "USB device ${action}: ${device.displayName()} (${device.deviceName}).",
+                message = "USB 设备${if (action == "attached") "已接入" else "已移除"}：${device.displayName()}（${device.deviceName}）。",
             )
         }
 
         publishInventorySnapshot(
-            reason = "USB device $action",
+            reason = if (action == "attached") "USB 设备接入" else "USB 设备移除",
             announceStatus = true,
         )
     }
@@ -118,7 +118,7 @@ class UsbCameraBridge(
         CameraBridgeEventBus.devices(devices)
         CameraBridgeEventBus.log(
             level = "debug",
-            message = "$reason: $summary",
+            message = "$reason：$summary",
         )
 
         if (!announceStatus || activeStreamDeviceId != null) {
@@ -157,9 +157,9 @@ class UsbCameraBridge(
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
         CameraBridgeEventBus.attach(events)
-        CameraBridgeEventBus.log("debug", "USB event channel attached.")
+        CameraBridgeEventBus.log("debug", "USB 事件通道已连接。")
         publishInventorySnapshot(
-            reason = "initial USB scan",
+            reason = "初始 USB 扫描",
             announceStatus = true,
         )
     }
@@ -182,13 +182,13 @@ class UsbCameraBridge(
     private fun requestPermission(call: MethodCall, result: MethodChannel.Result) {
         val deviceId = call.stringArgument("deviceId")
         if (deviceId.isNullOrBlank()) {
-            result.error("bad_args", "deviceId is required.", null)
+            result.error("bad_args", "必须提供 deviceId。", null)
             return
         }
 
         val device = findDevice(deviceId)
         if (device == null) {
-            result.error("not_found", "USB device was not found.", deviceId)
+            result.error("not_found", "未找到 USB 设备。", deviceId)
             return
         }
 
@@ -208,7 +208,7 @@ class UsbCameraBridge(
 
         CameraBridgeEventBus.status(
             phase = "permissionRequested",
-            message = "Requesting USB permission.",
+            message = "正在请求 USB 权限。",
         )
         usbManager.requestPermission(device, pendingIntent)
         result.success(false)
@@ -217,7 +217,7 @@ class UsbCameraBridge(
     private fun startSession(call: MethodCall, result: MethodChannel.Result) {
         val deviceId = call.stringArgument("deviceId")
         if (deviceId.isNullOrBlank()) {
-            result.error("bad_args", "deviceId is required.", null)
+            result.error("bad_args", "必须提供 deviceId。", null)
             return
         }
 
@@ -226,32 +226,32 @@ class UsbCameraBridge(
         val device = findDevice(deviceId)
 
         if (device == null) {
-            result.error("not_found", "USB device was not found.", deviceId)
+            result.error("not_found", "未找到 USB 设备。", deviceId)
             return
         }
 
         if (!isVideoClass(device)) {
             result.error(
                 "not_video_class",
-                "Selected USB device is not a video-class device.",
+                "所选 USB 设备不是视频摄像头。",
                 deviceId,
             )
             return
         }
 
         if (!usbManager.hasPermission(device)) {
-            result.error("permission_missing", "USB permission is required.", deviceId)
+            result.error("permission_missing", "需要 USB 权限。", deviceId)
             return
         }
 
         if (!hasCameraPermission()) {
             CameraBridgeEventBus.error(
-                message = "Android camera permission is required.",
-                details = "Grant CAMERA permission before starting the recorder.",
+                message = "需要 Android 相机权限。",
+                details = "授予 CAMERA 权限后才能开始录制。",
             )
             result.error(
                 "camera_permission_missing",
-                "Android camera permission is required.",
+                "需要 Android 相机权限。",
                 null,
             )
             return
@@ -268,7 +268,7 @@ class UsbCameraBridge(
 
         CameraBridgeEventBus.status(
             phase = "starting",
-            message = "Starting camera foreground service.",
+            message = "正在启动摄像头前台服务。",
         )
         activeStreamDeviceId = deviceId
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -282,7 +282,7 @@ class UsbCameraBridge(
     private fun stopSession(result: MethodChannel.Result) {
         CameraBridgeEventBus.status(
             phase = "stopping",
-            message = "Stopping camera foreground service.",
+            message = "正在停止摄像头前台服务。",
         )
         activeStreamDeviceId = null
         appContext.stopService(Intent(appContext, CameraStreamService::class.java))
@@ -340,10 +340,10 @@ class UsbCameraBridge(
         val cameraCount = devices.count { it["videoClass"] == true }
 
         return when {
-            usbCount == 0 -> "No USB device detected."
-            cameraCount == 0 -> "$usbCount USB device(s) detected, but no video camera found."
-            usbCount == cameraCount -> "$cameraCount USB camera(s) detected."
-            else -> "$cameraCount USB camera(s) detected among $usbCount USB device(s)."
+            usbCount == 0 -> "未检测到 USB 设备。"
+            cameraCount == 0 -> "检测到 $usbCount 个 USB 设备，但没有视频摄像头。"
+            usbCount == cameraCount -> "已检测到 $cameraCount 个 USB 摄像头。"
+            else -> "在 $usbCount 个 USB 设备中检测到 $cameraCount 个 USB 摄像头。"
         }
     }
 

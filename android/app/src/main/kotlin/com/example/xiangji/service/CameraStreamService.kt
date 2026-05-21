@@ -31,11 +31,11 @@ class CameraStreamService : Service() {
 
         CameraBridgeEventBus.status(
             phase = "starting",
-            message = "Camera foreground service is starting recorder.",
+            message = "摄像头前台服务正在启动录制器。",
         )
         CameraBridgeEventBus.log(
             level = "info",
-            message = "CameraStreamService started for $deviceId, stream=$streamId, fragment=${fragmentDurationMs}ms.",
+            message = "摄像头服务已启动：设备=$deviceId，流=$streamId，分片=${fragmentDurationMs}ms。",
         )
 
         recorder?.stop()
@@ -56,11 +56,11 @@ class CameraStreamService : Service() {
         recorder = null
         CameraBridgeEventBus.status(
             phase = "idle",
-            message = "Camera foreground service stopped.",
+            message = "摄像头前台服务已停止。",
         )
         CameraBridgeEventBus.log(
             level = "info",
-            message = "CameraStreamService stopped.",
+            message = "摄像头服务已停止。",
         )
         super.onDestroy()
     }
@@ -73,10 +73,10 @@ class CameraStreamService : Service() {
         }
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Xiangji camera stream",
+            "巡摄录制服务",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Keeps the USB camera stream service alive."
+            description = "保持 USB 摄像头录制服务运行。"
         }
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(channel)
@@ -95,8 +95,8 @@ class CameraStreamService : Service() {
 
         return builder
             .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("Xiangji camera stream")
-            .setContentText("Stream $streamId, ${fragmentDurationMs}ms fragments")
+            .setContentTitle("巡摄正在录制")
+            .setContentText("流 $streamId，分片 ${fragmentDurationMs}ms")
             .setOngoing(true)
             .build()
     }

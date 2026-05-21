@@ -9,7 +9,7 @@ class MockCameraBridge implements CameraBridge {
     : _devices = <UsbCameraDevice>[
         const UsbCameraDevice(
           deviceId: 'mock-camera-0',
-          deviceName: 'Mock UVC Camera',
+          deviceName: '模拟 UVC 摄像头',
           vendorId: 0x1A2B,
           productId: 0x1001,
           permissionGranted: true,
@@ -18,7 +18,7 @@ class MockCameraBridge implements CameraBridge {
         ),
         const UsbCameraDevice(
           deviceId: 'mock-hub-1',
-          deviceName: 'Mock USB Hub',
+          deviceName: '模拟 USB 集线器',
           vendorId: 0x1A2B,
           productId: 0x2001,
           permissionGranted: false,
@@ -51,11 +51,7 @@ class MockCameraBridge implements CameraBridge {
       return device.deviceId == deviceId;
     });
     if (index == -1) {
-      _eventController.add(
-        const CameraErrorEvent(
-          message: 'Mock bridge could not find the requested device.',
-        ),
-      );
+      _eventController.add(const CameraErrorEvent(message: '模拟桥接找不到请求的设备。'));
       return false;
     }
 
@@ -67,10 +63,7 @@ class MockCameraBridge implements CameraBridge {
     }
 
     _eventController.add(
-      CameraLogEvent(
-        level: LogLevel.info,
-        message: 'Mock permission request queued for $deviceId.',
-      ),
+      CameraLogEvent(level: LogLevel.info, message: '已为 $deviceId 排队模拟权限请求。'),
     );
 
     final timer = Timer(const Duration(milliseconds: 350), () {
@@ -93,42 +86,27 @@ class MockCameraBridge implements CameraBridge {
     }).firstOrNull;
 
     if (device == null) {
-      _eventController.add(
-        const CameraErrorEvent(
-          message: 'Mock bridge could not start without a selected device.',
-        ),
-      );
+      _eventController.add(const CameraErrorEvent(message: '模拟桥接无法在未选择设备时启动。'));
       return;
     }
 
     if (!device.permissionGranted) {
-      _eventController.add(
-        const CameraErrorEvent(
-          message:
-              'Mock bridge rejected the session because permission is missing.',
-        ),
-      );
+      _eventController.add(const CameraErrorEvent(message: '模拟桥接拒绝启动，因为缺少权限。'));
       return;
     }
 
     _sessionRunning = true;
     _eventController.add(
-      CameraStatusEvent(
-        phase: SessionPhase.starting,
-        message: 'Mock bridge is starting the stream.',
-      ),
+      CameraStatusEvent(phase: SessionPhase.starting, message: '模拟桥接正在启动录制。'),
     );
     _eventController.add(
       CameraLogEvent(
         level: LogLevel.info,
-        message: 'Mock session started for ${request.deviceId}.',
+        message: '模拟会话已为 ${request.deviceId} 启动。',
       ),
     );
     _eventController.add(
-      CameraStatusEvent(
-        phase: SessionPhase.streaming,
-        message: 'Mock bridge is streaming.',
-      ),
+      CameraStatusEvent(phase: SessionPhase.streaming, message: '模拟桥接正在录制。'),
     );
 
     for (var index = 0; index < 3; index++) {
@@ -178,10 +156,7 @@ class MockCameraBridge implements CameraBridge {
     }
     _timers.clear();
     _eventController.add(
-      const CameraStatusEvent(
-        phase: SessionPhase.idle,
-        message: 'Mock bridge stopped.',
-      ),
+      const CameraStatusEvent(phase: SessionPhase.idle, message: '模拟桥接已停止。'),
     );
   }
 

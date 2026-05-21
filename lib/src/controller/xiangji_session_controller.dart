@@ -36,7 +36,7 @@ class XiangjiSessionController extends ChangeNotifier {
   bool _pendingStartAfterPermission = false;
   bool _disposed = false;
   SessionPhase _phase = SessionPhase.idle;
-  String _statusMessage = 'Waiting for USB camera.';
+  String _statusMessage = '等待 USB 摄像头。';
   String _lastError = '';
   List<UsbCameraDevice> _devices = <UsbCameraDevice>[];
   String? _selectedDeviceId;
@@ -51,6 +51,7 @@ class XiangjiSessionController extends ChangeNotifier {
 
   bool get bridgeSupported => _bridgeSupported;
   SessionPhase get phase => _phase;
+  String get phaseLabel => _phaseText(_phase);
   String get statusMessage => _statusMessage;
   String get lastError => _lastError;
   List<UsbCameraDevice> get devices =>
@@ -116,8 +117,8 @@ class XiangjiSessionController extends ChangeNotifier {
     _bridgeSupported = await _bridge.isSupported();
     _appendLog(
       _bridgeSupported
-          ? 'Native USB bridge detected.'
-          : 'Native USB bridge unavailable. Running with fallback bridge.',
+          ? '已检测到 Android 原生 USB 桥接。'
+          : '未检测到 Android 原生 USB 桥接，当前使用模拟桥接。',
       LogLevel.info,
       topic: LogTopic.system,
     );
@@ -131,12 +132,8 @@ class XiangjiSessionController extends ChangeNotifier {
 
     if (_phase == SessionPhase.idle || _phase == SessionPhase.ready) {
       _phase = SessionPhase.discovering;
-      _statusMessage = 'Scanning USB devices.';
-      _appendLog(
-        'Scanning USB devices.',
-        LogLevel.info,
-        topic: LogTopic.device,
-      );
+      _statusMessage = '正在扫描 USB 设备。';
+      _appendLog('正在扫描 USB 设备。', LogLevel.info, topic: LogTopic.device);
       notifyListeners();
     }
 
@@ -150,7 +147,7 @@ class XiangjiSessionController extends ChangeNotifier {
       }
       if (_phase == SessionPhase.permissionRequested && _devices.isNotEmpty) {
         _phase = SessionPhase.ready;
-        _statusMessage = 'USB permission ready.';
+        _statusMessage = 'USB 权限已就绪。';
       }
       _appendLog(inventoryMessage, LogLevel.info, topic: LogTopic.device);
       _lastError = '';
@@ -158,9 +155,9 @@ class XiangjiSessionController extends ChangeNotifier {
     } catch (error, stackTrace) {
       _phase = SessionPhase.error;
       _lastError = error.toString();
-      _statusMessage = 'Failed to scan USB devices.';
+      _statusMessage = '扫描 USB 设备失败。';
       _appendLog(
-        'Device scan failed: $error',
+        '设备扫描失败：$error',
         LogLevel.error,
         topic: LogTopic.device,
         details: stackTrace,
@@ -176,9 +173,7 @@ class XiangjiSessionController extends ChangeNotifier {
     _selectedDeviceId = deviceId;
     final device = selectedDevice;
     _appendLog(
-      device == null
-          ? 'Selected device removed.'
-          : 'Selected ${device.deviceName}.',
+      device == null ? '已选择的设备已移除。' : '已选择 ${device.deviceName}。',
       LogLevel.info,
       topic: LogTopic.device,
     );
@@ -205,7 +200,7 @@ class XiangjiSessionController extends ChangeNotifier {
     final device = selectedDevice;
     if (device == null) {
       _appendLog(
-        'No USB camera selected.',
+        '还没有选择 USB 摄像头。',
         LogLevel.warning,
         topic: LogTopic.permission,
       );
@@ -214,7 +209,7 @@ class XiangjiSessionController extends ChangeNotifier {
 
     if (!device.videoClass) {
       _appendLog(
-        'Selected USB device is not a video camera.',
+        '当前选择的 USB 设备不是视频摄像头。',
         LogLevel.warning,
         topic: LogTopic.permission,
       );
@@ -222,7 +217,7 @@ class XiangjiSessionController extends ChangeNotifier {
     }
 
     _phase = SessionPhase.permissionRequested;
-    _statusMessage = 'Requesting permission for ${device.deviceName}.';
+    _statusMessage = '正在请求 ${device.deviceName} 的权限。';
     notifyListeners();
 
     final granted = await _bridge.requestPermission(device.deviceId);
@@ -234,7 +229,7 @@ class XiangjiSessionController extends ChangeNotifier {
 
     _pendingStartAfterPermission = true;
     _appendLog(
-      'Permission request sent for ${device.deviceName}.',
+      '已发送 ${device.deviceName} 的权限请求。',
       LogLevel.info,
       topic: LogTopic.permission,
     );
@@ -245,7 +240,7 @@ class XiangjiSessionController extends ChangeNotifier {
     final device = selectedDevice;
     if (device == null) {
       _appendLog(
-        'Pick a USB camera before starting.',
+        '开始前请先选择一个 USB 摄像头。',
         LogLevel.warning,
         topic: LogTopic.device,
       );
@@ -254,7 +249,7 @@ class XiangjiSessionController extends ChangeNotifier {
 
     if (!device.videoClass) {
       _appendLog(
-        'Selected USB device is not a video camera.',
+        '当前选择的 USB 设备不是视频摄像头。',
         LogLevel.warning,
         topic: LogTopic.device,
       );
@@ -264,7 +259,7 @@ class XiangjiSessionController extends ChangeNotifier {
     final target = _buildUploadTarget();
     if (target == null) {
       _appendLog(
-        'Enter a valid HTTP or HTTPS upload endpoint.',
+        '请输入有效的 HTTP 或 HTTPS 上传地址。',
         LogLevel.warning,
         topic: LogTopic.upload,
       );
@@ -273,11 +268,7 @@ class XiangjiSessionController extends ChangeNotifier {
 
     final fragmentDurationMs = _fragmentDuration();
     if (fragmentDurationMs == null) {
-      _appendLog(
-        'Fragment duration must be a positive integer.',
-        LogLevel.warning,
-        topic: LogTopic.session,
-      );
+      _appendLog('分片时长必须是正整数。', LogLevel.warning, topic: LogTopic.session);
       return;
     }
 
@@ -289,7 +280,7 @@ class XiangjiSessionController extends ChangeNotifier {
 
     _pendingStartAfterPermission = false;
     _phase = SessionPhase.starting;
-    _statusMessage = 'Starting stream from ${device.deviceName}.';
+    _statusMessage = '正在从 ${device.deviceName} 开始录制。';
     notifyListeners();
 
     try {
@@ -301,9 +292,9 @@ class XiangjiSessionController extends ChangeNotifier {
         ),
       );
       _phase = SessionPhase.starting;
-      _statusMessage = 'Start command sent to ${device.deviceName}.';
+      _statusMessage = '已向 ${device.deviceName} 发送开始指令。';
       _appendLog(
-        'Start command sent for ${device.deviceName}. Waiting for recorder status.',
+        '已向 ${device.deviceName} 发送开始指令，等待录制器状态。',
         LogLevel.info,
         topic: LogTopic.session,
       );
@@ -311,10 +302,10 @@ class XiangjiSessionController extends ChangeNotifier {
       unawaited(_drainPendingSegments());
     } catch (error, stackTrace) {
       _phase = SessionPhase.error;
-      _statusMessage = 'Failed to start the stream.';
+      _statusMessage = '启动录制失败。';
       _lastError = error.toString();
       _appendLog(
-        'Start failed: $error',
+        '启动失败：$error',
         LogLevel.error,
         topic: LogTopic.session,
         details: stackTrace,
@@ -326,21 +317,21 @@ class XiangjiSessionController extends ChangeNotifier {
   Future<void> stop() async {
     _pendingStartAfterPermission = false;
     _phase = SessionPhase.stopping;
-    _statusMessage = 'Stopping stream.';
+    _statusMessage = '正在停止录制。';
     notifyListeners();
 
     try {
       await _bridge.stopSession();
       _phase = _devices.isEmpty ? SessionPhase.idle : SessionPhase.ready;
-      _statusMessage = 'Stream stopped.';
-      _appendLog('Stream stopped.', LogLevel.info, topic: LogTopic.session);
+      _statusMessage = '录制已停止。';
+      _appendLog('录制已停止。', LogLevel.info, topic: LogTopic.session);
       notifyListeners();
     } catch (error, stackTrace) {
       _phase = SessionPhase.error;
-      _statusMessage = 'Failed to stop the stream.';
+      _statusMessage = '停止录制失败。';
       _lastError = error.toString();
       _appendLog(
-        'Stop failed: $error',
+        '停止失败：$error',
         LogLevel.error,
         topic: LogTopic.session,
         details: stackTrace,
@@ -367,7 +358,7 @@ class XiangjiSessionController extends ChangeNotifier {
           _lastError = '';
         }
         _appendLog(
-          message.isEmpty ? 'Session phase changed to ${phase.name}.' : message,
+          message.isEmpty ? '会话阶段已切换到 ${_phaseText(phase)}。' : message,
           phase == SessionPhase.error ? LogLevel.error : LogLevel.info,
           topic: phase == SessionPhase.error
               ? LogTopic.error
@@ -380,9 +371,7 @@ class XiangjiSessionController extends ChangeNotifier {
         break;
       case CameraPermissionEvent(:final deviceId, :final granted):
         _appendLog(
-          granted
-              ? 'Permission granted for $deviceId.'
-              : 'Permission denied for $deviceId.',
+          granted ? '$deviceId 已授权。' : '$deviceId 权限被拒绝。',
           granted ? LogLevel.info : LogLevel.warning,
           topic: LogTopic.permission,
         );
@@ -437,18 +426,31 @@ class XiangjiSessionController extends ChangeNotifier {
 
   String _inventoryMessage() {
     if (_devices.isEmpty) {
-      return 'No USB device detected.';
+      return '未检测到 USB 设备。';
     }
     if (!hasVideoCamera) {
-      return 'USB devices detected, but no video camera found.';
+      return '检测到 USB 设备，但没有视频摄像头。';
     }
     if (usbDeviceCount == 1 && videoCameraCount == 1) {
-      return '1 USB camera detected.';
+      return '已检测到 1 个 USB 摄像头。';
     }
     if (videoCameraCount == 1) {
-      return '1 USB camera detected among $usbDeviceCount USB devices.';
+      return '在 $usbDeviceCount 个 USB 设备中检测到 1 个 USB 摄像头。';
     }
-    return '$videoCameraCount USB cameras detected among $usbDeviceCount USB devices.';
+    return '在 $usbDeviceCount 个 USB 设备中检测到 $videoCameraCount 个 USB 摄像头。';
+  }
+
+  String _phaseText(SessionPhase phase) {
+    return switch (phase) {
+      SessionPhase.idle => '空闲',
+      SessionPhase.discovering => '扫描中',
+      SessionPhase.ready => '就绪',
+      SessionPhase.permissionRequested => '请求权限',
+      SessionPhase.starting => '启动中',
+      SessionPhase.streaming => '录制中',
+      SessionPhase.stopping => '停止中',
+      SessionPhase.error => '错误',
+    };
   }
 
   void _enqueueSegment(CameraSegment segment) {
@@ -456,7 +458,7 @@ class XiangjiSessionController extends ChangeNotifier {
     _pendingUploadCount = _pendingSegments.length;
     _lastSegmentAt = segment.capturedAt;
     _appendLog(
-      'Queued segment ${segment.segmentId} (${segment.byteLength} bytes).',
+      '分片 ${segment.segmentId} 已加入上传队列（${segment.byteLength} 字节）。',
       LogLevel.debug,
       topic: LogTopic.upload,
     );
@@ -473,7 +475,7 @@ class XiangjiSessionController extends ChangeNotifier {
     if (target == null) {
       if (_pendingSegments.isNotEmpty) {
         _appendLog(
-          'Upload queue is waiting for a valid endpoint.',
+          '上传队列正在等待有效的上传地址。',
           LogLevel.warning,
           topic: LogTopic.upload,
         );
@@ -498,7 +500,7 @@ class XiangjiSessionController extends ChangeNotifier {
           _uploadedSegments += 1;
           _lastUploadAt = DateTime.now();
           _appendLog(
-            'Uploaded ${queued.segment.segmentId} -> ${receipt.statusCode}.',
+            '分片 ${queued.segment.segmentId} 已上传，HTTP ${receipt.statusCode}。',
             LogLevel.info,
             topic: LogTopic.upload,
           );
@@ -516,7 +518,7 @@ class XiangjiSessionController extends ChangeNotifier {
             _pendingUploadCount = _pendingSegments.length;
             _failedSegments += 1;
             _appendLog(
-              'Dropping ${queued.segment.segmentId} after 3 failures.',
+              '分片 ${queued.segment.segmentId} 连续 3 次上传失败，已丢弃。',
               LogLevel.error,
               topic: LogTopic.upload,
               details: error,
@@ -524,7 +526,7 @@ class XiangjiSessionController extends ChangeNotifier {
             notifyListeners();
           } else {
             _appendLog(
-              'Upload failed for ${queued.segment.segmentId}, retrying later.',
+              '分片 ${queued.segment.segmentId} 上传失败，稍后重试。',
               LogLevel.warning,
               topic: LogTopic.upload,
               details: stackTrace,

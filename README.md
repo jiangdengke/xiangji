@@ -1,24 +1,22 @@
-# Xiangji
+# 巡摄
 
-Flutter shell for an Android USB camera streaming app.
+面向 Android USB 摄像头的边录边传 Flutter 应用。
 
-## What is implemented
+## 已实现
 
-- Flutter dashboard for stream status, USB device selection, endpoint config, and logs.
-- Dart-side upload queue that uploads each finished video segment with HTTP `POST`.
-- Android native bridge over `MethodChannel` and `EventChannel`.
-- USB device enumeration and permission request through Android USB Host APIs.
-- Android foreground service for Camera2 recording.
-- Camera2 H.264/MP4 segment recorder that emits finished segments to the Dart
-  upload queue while recording continues.
-- USB hotplug detection that distinguishes ordinary USB devices from real video
-  cameras.
-- Mock bridge for non-Android development and tests.
+- Flutter 控制台，包含状态、USB 设备选择、上传地址和日志。
+- Dart 侧上传队列，会把每个完成的视频分片通过 HTTP `POST` 发出。
+- Android 原生桥接，基于 `MethodChannel` 和 `EventChannel`。
+- 通过 Android USB Host API 枚举设备并请求权限。
+- 基于 Camera2 的前台录制服务。
+- Camera2 H.264/MP4 分片录制器，会在录制继续时持续产出可上传分片。
+- USB 热插拔检测，能区分普通 USB 设备和真正的视频摄像头。
+- 非 Android 开发和测试用的模拟桥接。
 
-The native recorder uses Android Camera2. It works when the board exposes the
-USB camera as a Camera2 device, preferably with `LENS_FACING_EXTERNAL`. If the
-camera only appears as `/dev/video*` and is not visible through Camera2, the app
-logs a clear error and a libuvc/V4L2 backend is still required for that board.
+原生录制器使用 Android Camera2。只有当板子把 USB 摄像头暴露成 Camera2
+设备时才可直接工作，最好是 `LENS_FACING_EXTERNAL`。如果摄像头只显示为
+`/dev/video*`，并且 Camera2 看不到它，应用会明确报错，这类板子仍然需要
+libuvc/V4L2 后端。
 
 ## Architecture
 

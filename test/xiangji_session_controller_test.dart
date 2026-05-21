@@ -57,10 +57,7 @@ void main() {
     expect(controller.hasUsbDevices, isTrue);
     expect(controller.hasVideoCamera, isFalse);
     expect(controller.canStart, isFalse);
-    expect(
-      controller.statusMessage,
-      'USB devices detected, but no video camera found.',
-    );
+    expect(controller.statusMessage, '检测到 USB 设备，但没有视频摄像头。');
 
     controller.dispose();
   });
@@ -109,7 +106,7 @@ class _TestBridge implements CameraBridge {
     await file.writeAsBytes(payload, flush: true);
 
     _events.add(
-      CameraStatusEvent(phase: SessionPhase.starting, message: 'starting'),
+      CameraStatusEvent(phase: SessionPhase.starting, message: '开始中'),
     );
     _events.add(
       CameraSegmentReadyEvent(
@@ -126,7 +123,7 @@ class _TestBridge implements CameraBridge {
       ),
     );
     _events.add(
-      CameraStatusEvent(phase: SessionPhase.streaming, message: 'streaming'),
+      CameraStatusEvent(phase: SessionPhase.streaming, message: '录制中'),
     );
   }
 

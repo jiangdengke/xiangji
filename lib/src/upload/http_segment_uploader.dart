@@ -18,7 +18,7 @@ class HttpSegmentUploader implements SegmentUploader {
   }) async {
     final file = File(segment.filePath);
     if (!await file.exists()) {
-      throw UploadException('Segment file does not exist.', segment.filePath);
+      throw UploadException('分片文件不存在。', segment.filePath);
     }
 
     final request = http.StreamedRequest('POST', target.endpoint);
@@ -40,10 +40,7 @@ class HttpSegmentUploader implements SegmentUploader {
     final responseBody = await response.stream.bytesToString();
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw UploadException(
-        'Upload failed with HTTP ${response.statusCode}.',
-        responseBody,
-      );
+      throw UploadException('上传失败，HTTP ${response.statusCode}。', responseBody);
     }
 
     return UploadReceipt(

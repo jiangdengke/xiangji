@@ -48,15 +48,15 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
       builder: (BuildContext context, Widget? child) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Xiangji Stream'),
+            title: const Text('巡摄'),
             actions: <Widget>[
               IconButton(
-                tooltip: 'Refresh devices',
+                tooltip: '刷新设备',
                 onPressed: controller.refreshDevices,
                 icon: const Icon(Icons.refresh),
               ),
               IconButton(
-                tooltip: 'Retry uploads',
+                tooltip: '重试上传',
                 onPressed: controller.retryPendingUploads,
                 icon: const Icon(Icons.restart_alt),
               ),
@@ -120,7 +120,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
 
   Widget _statusSection(BuildContext context) {
     return _Section(
-      title: 'Session',
+      title: '会话',
       subtitle: controller.statusMessage,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,17 +131,17 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
             children: <Widget>[
               _StatTile(
                 icon: controller.bridgeSupported ? Icons.usb : Icons.usb_off,
-                label: 'Bridge',
-                value: controller.bridgeSupported ? 'Native' : 'Fallback',
+                label: '桥接',
+                value: controller.bridgeSupported ? '原生' : '回退',
               ),
               _StatTile(
                 icon: _phaseIcon(controller.phase),
-                label: 'Phase',
-                value: controller.phase.name,
+                label: '阶段',
+                value: controller.phaseLabel,
               ),
               _StatTile(
                 icon: controller.hasUsbDevices ? Icons.usb : Icons.usb_off,
-                label: 'USB',
+                label: 'USB 设备',
                 value: controller.hasUsbDevices
                     ? controller.usbDeviceCount.toString()
                     : '0',
@@ -150,34 +150,34 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                 icon: controller.hasVideoCamera
                     ? Icons.videocam
                     : Icons.videocam_off,
-                label: 'Camera',
+                label: '摄像头',
                 value: controller.hasVideoCamera
                     ? controller.videoCameraCount.toString()
-                    : 'None',
+                    : '无',
               ),
               _StatTile(
                 icon: Icons.cloud_upload,
-                label: 'Queued',
+                label: '待上传',
                 value: controller.pendingUploadCount.toString(),
               ),
               _StatTile(
                 icon: Icons.done,
-                label: 'Uploaded',
+                label: '已上传',
                 value: controller.uploadedSegments.toString(),
               ),
               _StatTile(
                 icon: Icons.error_outline,
-                label: 'Failed',
+                label: '失败',
                 value: controller.failedSegments.toString(),
               ),
               _StatTile(
                 icon: Icons.movie_creation_outlined,
-                label: 'Last video',
+                label: '最近视频',
                 value: _formatClock(controller.lastSegmentAt),
               ),
               _StatTile(
                 icon: Icons.upload_file,
-                label: 'Last upload',
+                label: '最近上传',
                 value: _formatClock(controller.lastUploadAt),
               ),
             ],
@@ -192,9 +192,9 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
   Widget _controlsSection(BuildContext context) {
     final selectedDevice = controller.selectedDevice;
     return _Section(
-      title: 'Controls',
+      title: '控制',
       subtitle: controller.lastError.isEmpty
-          ? 'Operate the selected USB camera.'
+          ? '操作当前选中的 USB 摄像头。'
           : controller.lastError,
       child: Wrap(
         spacing: 12,
@@ -204,24 +204,24 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
           FilledButton.icon(
             onPressed: controller.canStart ? controller.start : null,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Start'),
+            label: const Text('开始'),
           ),
           FilledButton.tonalIcon(
             onPressed: controller.canStop ? controller.stop : null,
             icon: const Icon(Icons.stop),
-            label: const Text('Stop'),
+            label: const Text('停止'),
           ),
           OutlinedButton.icon(
             onPressed: selectedDevice == null || !selectedDevice.videoClass
                 ? null
                 : controller.requestPermission,
             icon: const Icon(Icons.lock_open),
-            label: const Text('Permission'),
+            label: const Text('权限'),
           ),
           OutlinedButton.icon(
             onPressed: controller.refreshDevices,
             icon: const Icon(Icons.refresh),
-            label: const Text('Rescan'),
+            label: const Text('重新扫描'),
           ),
         ],
       ),
@@ -230,17 +230,17 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
 
   Widget _configSection(BuildContext context) {
     return _Section(
-      title: 'Upload target',
+      title: '上传地址',
       subtitle: controller.isEndpointValid
-          ? 'The uploader posts each segment as a raw MP4 body.'
-          : 'Enter a valid HTTP or HTTPS endpoint before starting.',
+          ? '上传器会把每个分片作为原始 MP4 请求体发送。'
+          : '开始前请输入有效的 HTTP 或 HTTPS 地址。',
       child: Column(
         children: <Widget>[
           TextField(
             controller: _endpointController,
             onChanged: controller.updateEndpointText,
             decoration: const InputDecoration(
-              labelText: 'Endpoint',
+              labelText: '地址',
               hintText: 'http://server:8080/api/camera/segments',
               border: OutlineInputBorder(),
             ),
@@ -255,7 +255,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                   controller: _streamIdController,
                   onChanged: controller.updateStreamIdText,
                   decoration: const InputDecoration(
-                    labelText: 'Stream ID',
+                    labelText: '流 ID',
                     border: OutlineInputBorder(),
                   ),
                   textInputAction: TextInputAction.next,
@@ -268,7 +268,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                   controller: _fragmentController,
                   onChanged: controller.updateFragmentDurationText,
                   decoration: const InputDecoration(
-                    labelText: 'Fragment ms',
+                    labelText: '分片毫秒',
                     border: OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.number,
@@ -284,14 +284,14 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
   Widget _devicesSection(BuildContext context) {
     final devices = controller.devices;
     return _Section(
-      title: 'USB devices',
+      title: 'USB 设备',
       subtitle: devices.isEmpty
-          ? 'No USB device is visible to the bridge.'
+          ? '桥接层当前没有看到 USB 设备。'
           : controller.hasVideoCamera
-          ? '${controller.videoCameraCount} camera(s) detected.'
-          : 'USB devices detected, but no video camera found.',
+          ? '已检测到 ${controller.videoCameraCount} 个摄像头。'
+          : '检测到 USB 设备，但没有视频摄像头。',
       child: devices.isEmpty
-          ? const Text('No compatible camera was detected.')
+          ? const Text('未检测到可用摄像头。')
           : Column(
               children: devices
                   .map((UsbCameraDevice device) {
@@ -351,16 +351,14 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                                 children: <Widget>[
                                   Chip(
                                     label: Text(
-                                      device.videoClass ? 'Camera' : 'USB',
+                                      device.videoClass ? '摄像头' : 'USB',
                                     ),
                                     visualDensity: VisualDensity.compact,
                                   ),
                                   const SizedBox(height: 4),
                                   Chip(
                                     label: Text(
-                                      device.permissionGranted
-                                          ? 'Granted'
-                                          : 'Pending',
+                                      device.permissionGranted ? '已授权' : '待授权',
                                     ),
                                     visualDensity: VisualDensity.compact,
                                   ),
@@ -381,10 +379,10 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
     final logs = controller.recentLogs.where(_matchesLogFilter).toList();
     final latestLog = controller.latestLog;
     return _Section(
-      title: 'Logs',
+      title: '日志',
       subtitle: latestLog == null
-          ? 'Watch camera, capture, and upload events here.'
-          : 'Latest: ${latestLog.message}',
+          ? '这里会显示摄像头、录制和上传事件。'
+          : '最新：${latestLog.message}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -411,7 +409,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
           SizedBox(
             height: 460,
             child: logs.isEmpty
-                ? const Center(child: Text('No matching logs.'))
+                ? const Center(child: Text('没有匹配的日志。'))
                 : Scrollbar(
                     controller: _logScrollController,
                     thumbVisibility: true,
@@ -447,12 +445,12 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
 
   String _filterLabel(_LogFilter filter) {
     return switch (filter) {
-      _LogFilter.all => 'All',
-      _LogFilter.device => 'Device',
-      _LogFilter.permission => 'Permission',
-      _LogFilter.session => 'Video',
-      _LogFilter.upload => 'Upload',
-      _LogFilter.errors => 'Errors',
+      _LogFilter.all => '全部',
+      _LogFilter.device => '设备',
+      _LogFilter.permission => '权限',
+      _LogFilter.session => '录制',
+      _LogFilter.upload => '上传',
+      _LogFilter.errors => '错误',
     };
   }
 
@@ -489,25 +487,25 @@ class _ProcessFlow extends StatelessWidget {
     final steps = <_FlowStep>[
       _FlowStep(
         icon: Icons.usb,
-        label: 'USB camera',
+        label: 'USB 摄像头',
         value: _usbValue(),
         state: _usbState(),
       ),
       _FlowStep(
         icon: Icons.lock_open,
-        label: 'Permission',
+        label: '权限',
         value: _permissionValue(selectedDevice),
         state: _permissionState(selectedDevice),
       ),
       _FlowStep(
         icon: Icons.videocam,
-        label: 'Video',
+        label: '视频',
         value: _videoValue(),
         state: _videoState(selectedDevice),
       ),
       _FlowStep(
         icon: Icons.cloud_upload,
-        label: 'Upload',
+        label: '上传',
         value: _uploadValue(),
         state: _uploadState(),
       ),
@@ -516,7 +514,7 @@ class _ProcessFlow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('Current flow', style: Theme.of(context).textTheme.titleSmall),
+        Text('当前流程', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -531,17 +529,17 @@ class _ProcessFlow extends StatelessWidget {
 
   String _usbValue() {
     if (controller.phase == SessionPhase.discovering) {
-      return 'Scanning';
+      return '扫描中';
     }
     if (!controller.hasUsbDevices) {
-      return 'Not connected';
+      return '未连接';
     }
     if (controller.hasVideoCamera) {
       return controller.usbDeviceCount == controller.videoCameraCount
-          ? '${controller.videoCameraCount} camera(s)'
-          : '${controller.videoCameraCount} camera(s) in ${controller.usbDeviceCount} USB devices';
+          ? '${controller.videoCameraCount} 个摄像头'
+          : '${controller.videoCameraCount} 个摄像头，${controller.usbDeviceCount} 个 USB 设备';
     }
-    return 'No camera';
+    return '无摄像头';
   }
 
   _FlowState _usbState() {
@@ -562,15 +560,15 @@ class _ProcessFlow extends StatelessWidget {
 
   String _permissionValue(UsbCameraDevice? selectedDevice) {
     if (selectedDevice == null) {
-      return 'No device';
+      return '无设备';
     }
     if (!selectedDevice.videoClass) {
-      return 'Not camera';
+      return '非摄像头';
     }
     if (controller.phase == SessionPhase.permissionRequested) {
-      return 'Requesting';
+      return '请求中';
     }
-    return selectedDevice.permissionGranted ? 'Granted' : 'Needed';
+    return selectedDevice.permissionGranted ? '已授权' : '需要';
   }
 
   _FlowState _permissionState(UsbCameraDevice? selectedDevice) {
@@ -588,14 +586,14 @@ class _ProcessFlow extends StatelessWidget {
 
   String _videoValue() {
     if (!controller.hasVideoCamera) {
-      return 'No camera';
+      return '无摄像头';
     }
     return switch (controller.phase) {
-      SessionPhase.starting => 'Starting',
-      SessionPhase.streaming => 'Recording',
-      SessionPhase.stopping => 'Stopping',
-      SessionPhase.error => 'Error',
-      _ => 'Stopped',
+      SessionPhase.starting => '启动中',
+      SessionPhase.streaming => '录制中',
+      SessionPhase.stopping => '停止中',
+      SessionPhase.error => '错误',
+      _ => '已停止',
     };
   }
 
@@ -618,15 +616,15 @@ class _ProcessFlow extends StatelessWidget {
 
   String _uploadValue() {
     if (controller.isUploading) {
-      return 'Uploading';
+      return '上传中';
     }
     if (controller.pendingUploadCount > 0) {
-      return '${controller.pendingUploadCount} queued';
+      return '待上传 ${controller.pendingUploadCount} 个';
     }
     if (controller.uploadedSegments > 0) {
-      return 'Last ${_formatClock(controller.lastUploadAt)}';
+      return '最近 ${_formatClock(controller.lastUploadAt)}';
     }
-    return 'Waiting';
+    return '等待中';
   }
 
   _FlowState _uploadState() {
@@ -733,21 +731,21 @@ class _LogOverview extends StatelessWidget {
       children: <Widget>[
         _MiniStatus(
           icon: Icons.videocam,
-          label: 'Video',
-          value: controller.phase == SessionPhase.streaming ? 'Live' : 'Idle',
+          label: '录制',
+          value: controller.phase == SessionPhase.streaming ? '进行中' : '空闲',
         ),
         _MiniStatus(
           icon: Icons.cloud_upload,
-          label: 'Upload',
+          label: '上传',
           value: controller.isUploading
-              ? 'Active'
+              ? '进行中'
               : controller.pendingUploadCount > 0
-              ? 'Queued'
-              : 'Idle',
+              ? '排队中'
+              : '空闲',
         ),
         _MiniStatus(
           icon: Icons.schedule,
-          label: 'Last upload',
+          label: '最近上传',
           value: _formatClock(controller.lastUploadAt),
         ),
       ],
@@ -965,12 +963,12 @@ class _LogRow extends StatelessWidget {
 
   String _topicLabel(LogTopic topic) {
     return switch (topic) {
-      LogTopic.system => 'SYSTEM',
-      LogTopic.device => 'DEVICE',
-      LogTopic.permission => 'PERMISSION',
-      LogTopic.session => 'VIDEO',
-      LogTopic.upload => 'UPLOAD',
-      LogTopic.error => 'ERROR',
+      LogTopic.system => '系统',
+      LogTopic.device => '设备',
+      LogTopic.permission => '权限',
+      LogTopic.session => '录制',
+      LogTopic.upload => '上传',
+      LogTopic.error => '错误',
     };
   }
 }

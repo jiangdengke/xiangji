@@ -20,29 +20,29 @@ void main() {
     await tester.pumpWidget(XiangjiApp(controller: controller));
     await tester.pumpAndSettle();
 
-    expect(find.text('Xiangji Stream'), findsOneWidget);
-    expect(find.text('Fallback'), findsOneWidget);
-    expect(find.text('Camera'), findsWidgets);
+    expect(find.text('巡摄'), findsOneWidget);
+    expect(find.text('回退'), findsOneWidget);
+    expect(find.text('摄像头'), findsWidgets);
 
     await tester.scrollUntilVisible(
-      find.text('Controls'),
+      find.text('控制'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Controls'), findsOneWidget);
+    expect(find.text('控制'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('Upload target'),
+      find.text('上传地址'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Upload target'), findsOneWidget);
-    expect(find.text('USB devices'), findsOneWidget);
-    expect(find.text('Mock UVC Camera'), findsOneWidget);
+    expect(find.text('上传地址'), findsOneWidget);
+    expect(find.text('USB 设备'), findsWidgets);
+    expect(find.text('模拟 UVC 摄像头'), findsOneWidget);
   });
 }
 

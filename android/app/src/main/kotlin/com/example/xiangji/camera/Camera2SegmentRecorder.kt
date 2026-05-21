@@ -65,7 +65,7 @@ class Camera2SegmentRecorder(
 
     fun start(config: RecorderConfig) {
         if (!running.compareAndSet(false, true)) {
-            CameraBridgeEventBus.log("warning", "Camera recorder is already running.")
+            CameraBridgeEventBus.log("warning", "录制器已经在运行。")
             return
         }
 
@@ -73,8 +73,8 @@ class Camera2SegmentRecorder(
         try {
             if (!hasCameraPermission()) {
                 CameraBridgeEventBus.error(
-                    message = "Android camera permission is missing.",
-                    details = "Grant CAMERA permission before starting Camera2 recording.",
+                    message = "缺少 Android 相机权限。",
+                    details = "授予 CAMERA 权限后才能开始 Camera2 录制。",
                 )
                 running.set(false)
                 return
@@ -83,8 +83,8 @@ class Camera2SegmentRecorder(
             val selectedCamera = selectCamera()
             if (selectedCamera == null) {
                 CameraBridgeEventBus.error(
-                    message = "No Camera2 camera is available for recording.",
-                    details = "If the USB camera only appears as /dev/video*, a libuvc backend is required.",
+                    message = "没有可用于录制的 Camera2 摄像头。",
+                    details = "如果 USB 摄像头只显示为 /dev/video*，这个板子仍然需要 libuvc 后端。",
                 )
                 running.set(false)
                 return
@@ -98,7 +98,7 @@ class Camera2SegmentRecorder(
 
             CameraBridgeEventBus.log(
                 level = "info",
-                message = "Using Camera2 camera=$cameraId size=${size.width}x${size.height}.",
+                message = "正在使用 Camera2 摄像头 $cameraId，分辨率 ${size.width}x${size.height}。",
             )
 
             prepareEncoder(size)
@@ -106,7 +106,7 @@ class Camera2SegmentRecorder(
             openCamera(cameraId)
         } catch (error: Throwable) {
             CameraBridgeEventBus.error(
-                message = "Failed to start Camera2 recorder.",
+                message = "启动 Camera2 录制器失败。",
                 details = error.message ?: error.toString(),
             )
             stop()
@@ -165,7 +165,7 @@ class Camera2SegmentRecorder(
                 val lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
                 CameraBridgeEventBus.log(
                     level = "debug",
-                    message = "Camera2 camera=$cameraId lens=${lensFacingLabel(lensFacing)}.",
+                    message = "Camera2 摄像头 $cameraId，镜头方向=${lensFacingLabel(lensFacing)}。",
                 )
                 if (map == null) {
                     null
@@ -189,7 +189,7 @@ class Camera2SegmentRecorder(
 
         CameraBridgeEventBus.log(
             level = "warning",
-            message = "No LENS_FACING_EXTERNAL camera found; falling back to the first Camera2 camera.",
+            message = "没有找到 LENS_FACING_EXTERNAL 摄像头，回退到第一个 Camera2 摄像头。",
         )
         return cameras.first()
     }
@@ -257,7 +257,7 @@ class Camera2SegmentRecorder(
     private fun openCamera(cameraId: String) {
         val handler = cameraHandler
         if (handler == null) {
-            CameraBridgeEventBus.error("Camera handler is not ready.")
+            CameraBridgeEventBus.error("相机处理线程尚未就绪。")
             return
         }
 
@@ -270,14 +270,14 @@ class Camera2SegmentRecorder(
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
-                    CameraBridgeEventBus.error("Camera disconnected.", cameraId)
+                    CameraBridgeEventBus.error("摄像头已断开。", cameraId)
                     camera.close()
                     stop()
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
                     CameraBridgeEventBus.error(
-                        message = "Camera open failed.",
+                        message = "打开摄像头失败。",
                         details = "camera=$cameraId error=$error",
                     )
                     camera.close()
@@ -292,7 +292,7 @@ class Camera2SegmentRecorder(
         val surface = inputSurface
         val handler = cameraHandler
         if (surface == null || handler == null) {
-            CameraBridgeEventBus.error("Encoder surface is not ready.")
+            CameraBridgeEventBus.error("编码器 Surface 尚未就绪。")
             stop()
             return
         }
@@ -321,11 +321,11 @@ class Camera2SegmentRecorder(
                         session.setRepeatingRequest(request, null, handler)
                         CameraBridgeEventBus.status(
                             phase = "streaming",
-                            message = "Camera2 recording is active.",
+                            message = "Camera2 录制已开始。",
                         )
                     }.onFailure { error ->
                         CameraBridgeEventBus.error(
-                            message = "Failed to start camera capture.",
+                            message = "启动摄像头采集失败。",
                             details = error.message ?: error.toString(),
                         )
                         stop()
@@ -333,7 +333,7 @@ class Camera2SegmentRecorder(
                 }
 
                 override fun onConfigureFailed(session: CameraCaptureSession) {
-                    CameraBridgeEventBus.error("Camera capture session configuration failed.")
+                    CameraBridgeEventBus.error("摄像头采集会话配置失败。")
                     stop()
                 }
             },
@@ -426,7 +426,7 @@ class Camera2SegmentRecorder(
             requestKeyFrame()
             CameraBridgeEventBus.log(
                 level = "debug",
-                message = "Requested key frame for next ${config.fragmentDurationMs}ms segment.",
+                message = "已请求下一段 ${config.fragmentDurationMs}ms 分片的关键帧。",
             )
         }
     }
@@ -460,7 +460,7 @@ class Camera2SegmentRecorder(
 
         CameraBridgeEventBus.log(
             level = "info",
-            message = "Started segment ${segmentFile.name}.",
+            message = "已开始分片 ${segmentFile.name}。",
         )
     }
 
@@ -491,7 +491,7 @@ class Camera2SegmentRecorder(
         }.onFailure { error ->
             CameraBridgeEventBus.log(
                 level = "warning",
-                message = "MediaMuxer stop failed for ${segmentFile.name}: ${error.message}",
+                message = "停止 MediaMuxer 失败：${segmentFile.name}，${error.message}",
             )
         }.isSuccess
         runCatching {
@@ -504,7 +504,7 @@ class Camera2SegmentRecorder(
             }
             CameraBridgeEventBus.log(
                 level = "warning",
-                message = "Skipping incomplete segment ${segmentFile.name}.",
+                message = "跳过不完整分片 ${segmentFile.name}。",
             )
             return
         }
@@ -513,7 +513,7 @@ class Camera2SegmentRecorder(
         if (byteLength <= 0L) {
             CameraBridgeEventBus.log(
                 level = "warning",
-                message = "Skipping empty segment ${segmentFile.name}.",
+                message = "跳过空分片 ${segmentFile.name}。",
             )
             return
         }
@@ -532,7 +532,7 @@ class Camera2SegmentRecorder(
         )
         CameraBridgeEventBus.log(
             level = "info",
-            message = "Finished segment ${segmentFile.name} (${byteLength} bytes).",
+            message = "分片 ${segmentFile.name} 已完成（${byteLength} 字节）。",
         )
     }
 
@@ -563,10 +563,10 @@ class Camera2SegmentRecorder(
 
     private fun lensFacingLabel(value: Int?): String {
         return when (value) {
-            CameraCharacteristics.LENS_FACING_EXTERNAL -> "external"
-            CameraCharacteristics.LENS_FACING_FRONT -> "front"
-            CameraCharacteristics.LENS_FACING_BACK -> "back"
-            else -> "unknown"
+            CameraCharacteristics.LENS_FACING_EXTERNAL -> "外置"
+            CameraCharacteristics.LENS_FACING_FRONT -> "前置"
+            CameraCharacteristics.LENS_FACING_BACK -> "后置"
+            else -> "未知"
         }
     }
 

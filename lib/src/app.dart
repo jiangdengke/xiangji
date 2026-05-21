@@ -28,7 +28,7 @@ class _XiangjiAppState extends State<XiangjiApp> {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Xiangji',
+      title: '巡摄',
       theme: ThemeData(
         colorScheme: scheme,
         useMaterial3: true,

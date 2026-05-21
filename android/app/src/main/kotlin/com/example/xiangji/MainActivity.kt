@@ -43,11 +43,11 @@ class MainActivity : FlutterActivity() {
             when (permission) {
                 Manifest.permission.CAMERA -> {
                     if (granted) {
-                        CameraBridgeEventBus.log("info", "Android CAMERA permission granted.")
+                        CameraBridgeEventBus.log("info", "已授予 Android 相机权限。")
                     } else {
                         CameraBridgeEventBus.error(
-                            message = "Android CAMERA permission denied.",
-                            details = "Recording cannot start until this permission is granted.",
+                            message = "Android 相机权限被拒绝。",
+                            details = "授予该权限后才能开始录制。",
                         )
                     }
                 }
@@ -56,9 +56,9 @@ class MainActivity : FlutterActivity() {
                     CameraBridgeEventBus.log(
                         if (granted) "info" else "warning",
                         if (granted) {
-                            "Android notification permission granted."
+                            "已授予 Android 通知权限。"
                         } else {
-                            "Android notification permission denied; foreground service notification may be hidden."
+                            "Android 通知权限被拒绝，前台服务通知可能不可见。"
                         },
                     )
                 }
