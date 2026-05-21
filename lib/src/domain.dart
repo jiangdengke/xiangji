@@ -11,6 +11,8 @@ enum SessionPhase {
 
 enum LogLevel { debug, info, warning, error }
 
+enum LogTopic { system, device, permission, session, upload, error }
+
 class UsbCameraDevice {
   const UsbCameraDevice({
     required this.deviceId,
@@ -179,11 +181,13 @@ class StreamLogEntry {
   const StreamLogEntry({
     required this.timestamp,
     required this.level,
+    required this.topic,
     required this.message,
   });
 
   final DateTime timestamp;
   final LogLevel level;
+  final LogTopic topic;
   final String message;
 }
 

@@ -44,6 +44,7 @@ class XiangjiSessionController extends ChangeNotifier {
   int _failedSegments = 0;
   int _pendingUploadCount = 0;
   DateTime? _lastSegmentAt;
+  DateTime? _lastUploadAt;
   String _endpointText;
   String _streamIdText;
   String _fragmentDurationText;
@@ -73,7 +74,11 @@ class XiangjiSessionController extends ChangeNotifier {
   int get pendingUploadCount => _pendingUploadCount;
   bool get isUploading => _drainingUploads;
   DateTime? get lastSegmentAt => _lastSegmentAt;
+  DateTime? get lastUploadAt => _lastUploadAt;
   List<StreamLogEntry> get logs => List<StreamLogEntry>.unmodifiable(_logs);
+  List<StreamLogEntry> get recentLogs =>
+      List<StreamLogEntry>.unmodifiable(_logs.reversed);
+  StreamLogEntry? get latestLog => _logs.isEmpty ? null : _logs.last;
   String get endpointText => _endpointText;
   String get streamIdText => _streamIdText;
   String get fragmentDurationText => _fragmentDurationText;
@@ -105,6 +110,7 @@ class XiangjiSessionController extends ChangeNotifier {
           ? 'Native USB bridge detected.'
           : 'Native USB bridge unavailable. Running with fallback bridge.',
       LogLevel.info,
+      topic: LogTopic.system,
     );
     await refreshDevices();
   }
@@ -117,6 +123,11 @@ class XiangjiSessionController extends ChangeNotifier {
     if (_phase == SessionPhase.idle || _phase == SessionPhase.ready) {
       _phase = SessionPhase.discovering;
       _statusMessage = 'Scanning USB devices.';
+      _appendLog(
+        'Scanning USB devices.',
+        LogLevel.info,
+        topic: LogTopic.device,
+      );
       notifyListeners();
     }
 
@@ -133,6 +144,13 @@ class XiangjiSessionController extends ChangeNotifier {
         _phase = SessionPhase.ready;
         _statusMessage = 'USB permission ready.';
       }
+      _appendLog(
+        _devices.isEmpty
+            ? 'No USB camera detected.'
+            : 'Found ${_devices.length} USB device(s).',
+        LogLevel.info,
+        topic: LogTopic.device,
+      );
       _lastError = '';
       notifyListeners();
     } catch (error, stackTrace) {
@@ -142,6 +160,7 @@ class XiangjiSessionController extends ChangeNotifier {
       _appendLog(
         'Device scan failed: $error',
         LogLevel.error,
+        topic: LogTopic.device,
         details: stackTrace,
       );
       notifyListeners();
@@ -159,6 +178,7 @@ class XiangjiSessionController extends ChangeNotifier {
           ? 'Selected device removed.'
           : 'Selected ${device.deviceName}.',
       LogLevel.info,
+      topic: LogTopic.device,
     );
     notifyListeners();
   }
@@ -182,7 +202,11 @@ class XiangjiSessionController extends ChangeNotifier {
   Future<void> requestPermission() async {
     final device = selectedDevice;
     if (device == null) {
-      _appendLog('No USB camera selected.', LogLevel.warning);
+      _appendLog(
+        'No USB camera selected.',
+        LogLevel.warning,
+        topic: LogTopic.permission,
+      );
       return;
     }
 
@@ -201,6 +225,7 @@ class XiangjiSessionController extends ChangeNotifier {
     _appendLog(
       'Permission request sent for ${device.deviceName}.',
       LogLevel.info,
+      topic: LogTopic.permission,
     );
     notifyListeners();
   }
@@ -208,7 +233,11 @@ class XiangjiSessionController extends ChangeNotifier {
   Future<void> start() async {
     final device = selectedDevice;
     if (device == null) {
-      _appendLog('Pick a USB camera before starting.', LogLevel.warning);
+      _appendLog(
+        'Pick a USB camera before starting.',
+        LogLevel.warning,
+        topic: LogTopic.device,
+      );
       return;
     }
 
@@ -217,6 +246,7 @@ class XiangjiSessionController extends ChangeNotifier {
       _appendLog(
         'Enter a valid HTTP or HTTPS upload endpoint.',
         LogLevel.warning,
+        topic: LogTopic.upload,
       );
       return;
     }
@@ -226,6 +256,7 @@ class XiangjiSessionController extends ChangeNotifier {
       _appendLog(
         'Fragment duration must be a positive integer.',
         LogLevel.warning,
+        topic: LogTopic.session,
       );
       return;
     }
@@ -251,14 +282,23 @@ class XiangjiSessionController extends ChangeNotifier {
       );
       _phase = SessionPhase.streaming;
       _statusMessage = 'Streaming from ${device.deviceName}.';
-      _appendLog('Session started for ${device.deviceName}.', LogLevel.info);
+      _appendLog(
+        'Session started for ${device.deviceName}.',
+        LogLevel.info,
+        topic: LogTopic.session,
+      );
       notifyListeners();
       unawaited(_drainPendingSegments());
     } catch (error, stackTrace) {
       _phase = SessionPhase.error;
       _statusMessage = 'Failed to start the stream.';
       _lastError = error.toString();
-      _appendLog('Start failed: $error', LogLevel.error, details: stackTrace);
+      _appendLog(
+        'Start failed: $error',
+        LogLevel.error,
+        topic: LogTopic.session,
+        details: stackTrace,
+      );
       notifyListeners();
     }
   }
@@ -273,13 +313,18 @@ class XiangjiSessionController extends ChangeNotifier {
       await _bridge.stopSession();
       _phase = _devices.isEmpty ? SessionPhase.idle : SessionPhase.ready;
       _statusMessage = 'Stream stopped.';
-      _appendLog('Stream stopped.', LogLevel.info);
+      _appendLog('Stream stopped.', LogLevel.info, topic: LogTopic.session);
       notifyListeners();
     } catch (error, stackTrace) {
       _phase = SessionPhase.error;
       _statusMessage = 'Failed to stop the stream.';
       _lastError = error.toString();
-      _appendLog('Stop failed: $error', LogLevel.error, details: stackTrace);
+      _appendLog(
+        'Stop failed: $error',
+        LogLevel.error,
+        topic: LogTopic.session,
+        details: stackTrace,
+      );
       notifyListeners();
     }
   }
@@ -292,6 +337,13 @@ class XiangjiSessionController extends ChangeNotifier {
     switch (event) {
       case CameraDevicesUpdated(:final devices):
         _replaceDevices(devices);
+        _appendLog(
+          devices.isEmpty
+              ? 'USB scan updated: no camera detected.'
+              : 'USB scan updated: ${devices.length} device(s) visible.',
+          LogLevel.info,
+          topic: LogTopic.device,
+        );
         notifyListeners();
         break;
       case CameraStatusEvent(:final phase, :final message):
@@ -300,6 +352,13 @@ class XiangjiSessionController extends ChangeNotifier {
         if (phase != SessionPhase.error) {
           _lastError = '';
         }
+        _appendLog(
+          message.isEmpty ? 'Session phase changed to ${phase.name}.' : message,
+          phase == SessionPhase.error ? LogLevel.error : LogLevel.info,
+          topic: phase == SessionPhase.error
+              ? LogTopic.error
+              : LogTopic.session,
+        );
         notifyListeners();
         break;
       case CameraSegmentReadyEvent(:final segment):
@@ -311,6 +370,7 @@ class XiangjiSessionController extends ChangeNotifier {
               ? 'Permission granted for $deviceId.'
               : 'Permission denied for $deviceId.',
           granted ? LogLevel.info : LogLevel.warning,
+          topic: LogTopic.permission,
         );
         await refreshDevices();
         if (granted &&
@@ -321,13 +381,18 @@ class XiangjiSessionController extends ChangeNotifier {
         }
         break;
       case CameraLogEvent(:final level, :final message):
-        _appendLog(message, level);
+        _appendLog(message, level, topic: LogTopic.system);
         break;
       case CameraErrorEvent(:final message, :final details):
         _phase = SessionPhase.error;
         _statusMessage = message;
         _lastError = details?.toString() ?? message;
-        _appendLog(message, LogLevel.error, details: details);
+        _appendLog(
+          message,
+          LogLevel.error,
+          topic: LogTopic.error,
+          details: details,
+        );
         notifyListeners();
         break;
     }
@@ -355,6 +420,7 @@ class XiangjiSessionController extends ChangeNotifier {
     _appendLog(
       'Queued segment ${segment.segmentId} (${segment.byteLength} bytes).',
       LogLevel.debug,
+      topic: LogTopic.upload,
     );
     notifyListeners();
     unawaited(_drainPendingSegments());
@@ -371,6 +437,7 @@ class XiangjiSessionController extends ChangeNotifier {
         _appendLog(
           'Upload queue is waiting for a valid endpoint.',
           LogLevel.warning,
+          topic: LogTopic.upload,
         );
       }
       return;
@@ -391,9 +458,11 @@ class XiangjiSessionController extends ChangeNotifier {
           _pendingSegments.removeFirst();
           _pendingUploadCount = _pendingSegments.length;
           _uploadedSegments += 1;
+          _lastUploadAt = DateTime.now();
           _appendLog(
             'Uploaded ${queued.segment.segmentId} -> ${receipt.statusCode}.',
             LogLevel.info,
+            topic: LogTopic.upload,
           );
           if (target.deleteAfterUpload) {
             final file = File(queued.segment.filePath);
@@ -411,6 +480,7 @@ class XiangjiSessionController extends ChangeNotifier {
             _appendLog(
               'Dropping ${queued.segment.segmentId} after 3 failures.',
               LogLevel.error,
+              topic: LogTopic.upload,
               details: error,
             );
             notifyListeners();
@@ -418,6 +488,7 @@ class XiangjiSessionController extends ChangeNotifier {
             _appendLog(
               'Upload failed for ${queued.segment.segmentId}, retrying later.',
               LogLevel.warning,
+              topic: LogTopic.upload,
               details: stackTrace,
             );
             _scheduleRetry();
@@ -469,17 +540,18 @@ class XiangjiSessionController extends ChangeNotifier {
   void _appendLog(
     String message,
     LogLevel level, {
+    LogTopic topic = LogTopic.system,
     Object? details,
     StackTrace? stackTrace,
     bool notify = true,
   }) {
-    final composed = details == null
-        ? message
-        : '$message ${details.toString()}';
+    final detailText = _compactLogDetails(details);
+    final composed = detailText == null ? message : '$message $detailText';
     _logs.add(
       StreamLogEntry(
         timestamp: DateTime.now(),
         level: level,
+        topic: topic,
         message: composed,
       ),
     );
@@ -492,6 +564,22 @@ class XiangjiSessionController extends ChangeNotifier {
     if (stackTrace != null) {
       debugPrint(stackTrace.toString());
     }
+  }
+
+  String? _compactLogDetails(Object? details) {
+    if (details == null) {
+      return null;
+    }
+
+    final raw = details.toString();
+    final firstLine = raw.split('\n').first.trim();
+    if (firstLine.isEmpty) {
+      return null;
+    }
+    if (firstLine.length <= 180) {
+      return firstLine;
+    }
+    return '${firstLine.substring(0, 180)}...';
   }
 
   @override

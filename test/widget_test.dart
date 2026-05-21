@@ -22,15 +22,16 @@ void main() {
 
     expect(find.text('Xiangji Stream'), findsOneWidget);
     expect(find.text('Controls'), findsOneWidget);
-    expect(find.text('Upload target'), findsOneWidget);
     expect(find.text('Fallback'), findsOneWidget);
 
-    await tester.drag(
-      find.byKey(const Key('dashboard_scroll')),
-      const Offset(0, -700),
+    await tester.scrollUntilVisible(
+      find.text('Upload target'),
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Upload target'), findsOneWidget);
     expect(find.text('USB devices'), findsOneWidget);
     expect(find.text('Mock UVC Camera'), findsOneWidget);
   });
