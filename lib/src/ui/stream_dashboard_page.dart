@@ -196,7 +196,9 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
     return _Section(
       title: '控制',
       subtitle: controller.lastError.isEmpty
-          ? controller.hasSelectedVideoCamera
+          ? !controller.bridgeSupported
+                ? '当前使用模拟桥接，真机需 Android 原生桥接。'
+                : controller.hasSelectedVideoCamera
                 ? '当前已选中 ${controller.selectedVideoCameraCount} 路摄像头。'
                 : '请先在下方勾选至少一路视频摄像头。'
           : controller.lastError,

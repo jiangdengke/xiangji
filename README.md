@@ -14,10 +14,10 @@
 - USB 热插拔检测，能区分普通 USB 设备和真正的视频摄像头。
 - 非 Android 开发和测试用的模拟桥接。
 
-原生录制器使用 Android Camera2。只有当板子把 USB 摄像头暴露成 Camera2
-设备时才可直接工作，最好是 `LENS_FACING_EXTERNAL`。如果摄像头只显示为
-`/dev/video*`，并且 Camera2 看不到它，应用会明确报错，这类板子仍然需要
-libuvc/V4L2 后端。
+原生录制器使用 Android Camera2。优先枚举 USB Video Class 设备；如果真机
+摄像头是擎朗机器人内置摄像头且没有枚举为 USB 设备，应用会回退列出系统
+Camera2 摄像头并直接录制。只有当摄像头只显示为 `/dev/video*`，并且
+Camera2 看不到它时，仍然需要 libuvc/V4L2 后端。
 
 多摄像头录制会在同一个前台服务中为每路摄像头启动一个录制器。基础流 ID
 会自动追加序号，例如 `camera-001-01`、`camera-001-02`。当前实现会按

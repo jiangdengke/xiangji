@@ -91,7 +91,7 @@ class CameraStreamService : Service() {
             return
         }
 
-        val cameraId = acquireCameraId(deviceId)
+        val cameraId = explicitCamera2Id(deviceId) ?: acquireCameraId(deviceId)
         if (cameraId == null) {
             CameraBridgeEventBus.error(
                 message = "没有空闲的 Camera2 摄像头可用于 $deviceId。",
@@ -218,6 +218,16 @@ class CameraStreamService : Service() {
         return externalCameraIds.ifEmpty { cameraIds }
     }
 
+    private fun explicitCamera2Id(deviceId: String): String? {
+        if (!deviceId.startsWith(CAMERA2_DEVICE_PREFIX)) {
+            return null
+        }
+        val cameraId = deviceId.removePrefix(CAMERA2_DEVICE_PREFIX).takeIf { it.isNotBlank() }
+            ?: return null
+        cameraAssignments[deviceId] = cameraId
+        return cameraId
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return
@@ -286,6 +296,7 @@ class CameraStreamService : Service() {
 
         const val ACTION_START_OR_UPDATE = "com.example.xiangji.action.START_OR_UPDATE"
         const val ACTION_STOP_DEVICE = "com.example.xiangji.action.STOP_DEVICE"
+        const val CAMERA2_DEVICE_PREFIX = "camera2:"
 
         private const val CHANNEL_ID = "xiangji_camera_stream"
         private const val NOTIFICATION_ID = 5201

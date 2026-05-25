@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
@@ -23,6 +25,7 @@ class UsbCameraBridge(
 ) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
     private val appContext = context.applicationContext
     private val usbManager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
+    private val cameraManager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
     private val methodChannel = MethodChannel(messenger, METHOD_CHANNEL)
     private val eventChannel = EventChannel(messenger, EVENT_CHANNEL)
     private var receiverRegistered = false
@@ -194,6 +197,13 @@ class UsbCameraBridge(
             return
         }
 
+        if (camera2IdFromDeviceId(deviceId) != null) {
+            val granted = hasCameraPermission()
+            CameraBridgeEventBus.permission(deviceId, granted)
+            result.success(granted)
+            return
+        }
+
         val device = findDevice(deviceId)
         if (device == null) {
             result.error("not_found", "未找到 USB 设备。", deviceId)
@@ -231,14 +241,15 @@ class UsbCameraBridge(
 
         val streamId = call.stringArgument("streamId") ?: "camera-001"
         val fragmentDurationMs = call.intArgument("fragmentDurationMs", 2000)
-        val device = findDevice(deviceId)
+        val camera2Id = camera2IdFromDeviceId(deviceId)
+        val device = if (camera2Id == null) findDevice(deviceId) else null
 
-        if (device == null) {
+        if (camera2Id == null && device == null) {
             result.error("not_found", "未找到 USB 设备。", deviceId)
             return
         }
 
-        if (!isVideoClass(device)) {
+        if (camera2Id == null && device != null && !isVideoClass(device)) {
             result.error(
                 "not_video_class",
                 "所选 USB 设备不是视频摄像头。",
@@ -247,7 +258,7 @@ class UsbCameraBridge(
             return
         }
 
-        if (!usbManager.hasPermission(device)) {
+        if (camera2Id == null && device != null && !usbManager.hasPermission(device)) {
             result.error("permission_missing", "需要 USB 权限。", deviceId)
             return
         }
@@ -275,7 +286,7 @@ class UsbCameraBridge(
 
         CameraBridgeEventBus.status(
             phase = "starting",
-            message = "正在启动 ${device.displayName()}，当前将录制 $nextActiveCount 路摄像头。",
+            message = "正在启动 ${device?.displayName() ?: "Camera2 $camera2Id"}，当前将录制 $nextActiveCount 路摄像头。",
         )
         activeStreamDeviceIds.add(deviceId)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -329,7 +340,7 @@ class UsbCameraBridge(
     }
 
     private fun listDeviceMaps(): List<Map<String, Any?>> {
-        return usbManager.deviceList.values.map { device ->
+        val usbDevices = usbManager.deviceList.values.map { device ->
             mapOf(
                 "deviceId" to device.deviceName,
                 "deviceName" to device.displayName(),
@@ -339,6 +350,37 @@ class UsbCameraBridge(
                 "videoClass" to isVideoClass(device),
                 "interfaceCount" to device.interfaceCount,
             )
+        }
+        val hasUsbVideoCamera = usbDevices.any { it["videoClass"] == true }
+        if (hasUsbVideoCamera) {
+            return usbDevices
+        }
+        return usbDevices + listCamera2DeviceMaps()
+    }
+
+    private fun listCamera2DeviceMaps(): List<Map<String, Any?>> {
+        return runCatching {
+            cameraManager.cameraIdList.map { cameraId ->
+                val lensFacing = runCatching {
+                    cameraManager.getCameraCharacteristics(cameraId)
+                        .get(CameraCharacteristics.LENS_FACING)
+                }.getOrNull()
+                mapOf(
+                    "deviceId" to "$CAMERA2_DEVICE_PREFIX$cameraId",
+                    "deviceName" to "Camera2 ${lensFacingLabel(lensFacing)}摄像头 $cameraId",
+                    "vendorId" to 0,
+                    "productId" to 0,
+                    "permissionGranted" to hasCameraPermission(),
+                    "videoClass" to true,
+                    "interfaceCount" to 0,
+                )
+            }
+        }.getOrElse { error ->
+            CameraBridgeEventBus.log(
+                level = "warning",
+                message = "读取 Camera2 摄像头失败：${error.message ?: error}",
+            )
+            emptyList()
         }
     }
 
@@ -367,6 +409,22 @@ class UsbCameraBridge(
             }
         }
         return false
+    }
+
+    private fun camera2IdFromDeviceId(deviceId: String): String? {
+        if (!deviceId.startsWith(CAMERA2_DEVICE_PREFIX)) {
+            return null
+        }
+        return deviceId.removePrefix(CAMERA2_DEVICE_PREFIX).takeIf { it.isNotBlank() }
+    }
+
+    private fun lensFacingLabel(value: Int?): String {
+        return when (value) {
+            CameraCharacteristics.LENS_FACING_EXTERNAL -> "外置"
+            CameraCharacteristics.LENS_FACING_FRONT -> "前置"
+            CameraCharacteristics.LENS_FACING_BACK -> "后置"
+            else -> ""
+        }
     }
 
     private fun hasCameraPermission(): Boolean {
@@ -418,5 +476,6 @@ class UsbCameraBridge(
         const val METHOD_CHANNEL = "xiangji/usb_camera/method"
         const val EVENT_CHANNEL = "xiangji/usb_camera/events"
         const val ACTION_USB_PERMISSION = "com.example.xiangji.USB_PERMISSION"
+        const val CAMERA2_DEVICE_PREFIX = "camera2:"
     }
 }
