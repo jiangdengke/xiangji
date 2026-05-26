@@ -24,6 +24,7 @@ android {
         applicationId = "com.example.xiangji"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // The target robot runs Android 6.0.1/API 23.
         minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

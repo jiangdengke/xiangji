@@ -26,7 +26,9 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.5'
+          # Flutter 3.35+ raises the Android runtime floor to API 24.
+          # The target robot runs Android 6.0.1/API 23.
+          flutter-version: '3.32.8'
           channel: stable
           cache: true
 
