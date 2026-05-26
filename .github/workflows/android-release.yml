@@ -33,7 +33,9 @@ jobs:
           cache: true
 
       - name: Install Android SDK packages
-        run: yes | sdkmanager "platforms;android-36"
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
 
       - name: Get dependencies
         run: flutter pub get
