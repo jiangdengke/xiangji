@@ -74,6 +74,34 @@ void main() {
 
     controller.dispose();
   });
+
+  test('controller keeps stop available after a stale ready status', () async {
+    final bridge = _TestBridge();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      endpointText: 'http://127.0.0.1:8080/api/camera/segments',
+    );
+
+    await controller.initialize();
+    await controller.start();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+
+    expect(controller.canStop, isTrue);
+
+    bridge.emitStatus(SessionPhase.ready, '设备列表已刷新。');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.phase, SessionPhase.ready);
+    expect(controller.canStop, isTrue);
+
+    await controller.stop();
+
+    expect(bridge.stopRequests, 1);
+    expect(controller.canStop, isFalse);
+
+    controller.dispose();
+  });
 }
 
 class _TestBridge implements CameraBridge {
@@ -105,6 +133,7 @@ class _TestBridge implements CameraBridge {
       StreamController<CameraBridgeEvent>.broadcast();
   final List<UsbCameraDevice> _devices;
   final List<CameraSessionRequest> startRequests = <CameraSessionRequest>[];
+  int stopRequests = 0;
 
   @override
   Stream<CameraBridgeEvent> get events => _events.stream;
@@ -154,7 +183,13 @@ class _TestBridge implements CameraBridge {
   }
 
   @override
-  Future<void> stopSession() async {}
+  Future<void> stopSession() async {
+    stopRequests += 1;
+  }
+
+  void emitStatus(SessionPhase phase, String message) {
+    _events.add(CameraStatusEvent(phase: phase, message: message));
+  }
 
   @override
   Future<void> dispose() async {

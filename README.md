@@ -25,6 +25,16 @@ Camera2 外置摄像头列表顺序分配给选中的 USB 摄像头；如果板�
 实现没有提供 USB 设备和 Camera2 cameraId 的稳定对应关系，需要在设备适配层
 继续补映射。
 
+## 录制与上传流程
+
+1. Flutter 端选择摄像头、上传地址、流 ID 和分片时长。
+2. 点击开始后，Dart 通过 MethodChannel 调 Android 原生前台服务。
+3. 原生侧用 Camera2 + MediaCodec + MediaMuxer 录制成连续的 MP4 分片。
+4. 分片先写入应用私有目录 `files/segments/<streamId>/`。
+5. 每个分片完成后，原生侧通过 EventChannel 把文件路径和元数据回传给 Dart。
+6. Dart 端把分片加入上传队列，按顺序发 HTTP `POST`。
+7. 上传成功后删除本地分片；上传失败则重试，连续 3 次失败后标记失败并保留文件。
+
 ## Architecture
 
 ```text
@@ -45,7 +55,7 @@ android/app/src/main/kotlin/com/example/xiangji/service/CameraStreamService.kt
 
 ## HTTP segment upload
 
-Each segment is posted as the raw request body:
+Each segment is posted as the raw MP4 body:
 
 ```http
 POST /api/camera/segments
@@ -59,6 +69,9 @@ X-Duration-Ms: 2000
 X-Byte-Length: 123456
 X-Captured-At: 2026-05-21T06:00:00.000Z
 ```
+
+服务端只要能接收原始二进制请求体就行，推荐直接按 `Content-Type: video/mp4`
+保存或转存。返回 2xx 视为成功；非 2xx 会被客户端重试。
 
 ## Verify
 

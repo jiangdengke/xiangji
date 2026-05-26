@@ -34,6 +34,7 @@ class XiangjiSessionController extends ChangeNotifier {
   bool _bridgeSupported = false;
   bool _drainingUploads = false;
   bool _pendingStartAfterPermission = false;
+  bool _sessionActive = false;
   bool _disposed = false;
   SessionPhase _phase = SessionPhase.idle;
   String _statusMessage = '等待 USB 摄像头。';
@@ -112,7 +113,9 @@ class XiangjiSessionController extends ChangeNotifier {
   }
 
   bool get canStop {
-    return phase == SessionPhase.streaming || phase == SessionPhase.starting;
+    return _sessionActive ||
+        phase == SessionPhase.streaming ||
+        phase == SessionPhase.starting;
   }
 
   Future<void> initialize() async {
@@ -368,6 +371,7 @@ class XiangjiSessionController extends ChangeNotifier {
             fragmentDurationMs: fragmentDurationMs,
           ),
         );
+        _sessionActive = true;
         _appendLog(
           '已向 ${device.deviceName} 发送开始指令，流 ID：$streamId。',
           LogLevel.info,
@@ -409,6 +413,7 @@ class XiangjiSessionController extends ChangeNotifier {
 
     try {
       await _bridge.stopSession();
+      _sessionActive = false;
       _phase = _devices.isEmpty ? SessionPhase.idle : SessionPhase.ready;
       _statusMessage = '全部录制已停止。';
       _appendLog('全部录制已停止。', LogLevel.info, topic: LogTopic.session);
@@ -439,6 +444,12 @@ class XiangjiSessionController extends ChangeNotifier {
         notifyListeners();
         break;
       case CameraStatusEvent(:final phase, :final message):
+        if (phase == SessionPhase.streaming || phase == SessionPhase.starting) {
+          _sessionActive = true;
+        }
+        if (phase == SessionPhase.idle) {
+          _sessionActive = false;
+        }
         _phase = phase;
         _statusMessage = message;
         if (phase != SessionPhase.error) {
