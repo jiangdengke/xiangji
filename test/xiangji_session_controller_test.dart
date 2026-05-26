@@ -6,45 +6,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xiangji/src/bridge/camera_bridge.dart';
 import 'package:xiangji/src/controller/xiangji_session_controller.dart';
 import 'package:xiangji/src/domain.dart';
+import 'package:xiangji/src/live/live_stream_publisher.dart';
 import 'package:xiangji/src/upload/segment_uploader.dart';
 
 void main() {
-  test(
-    'controller uploads segments emitted by multiple camera sessions',
-    () async {
-      final bridge = _TestBridge();
-      final uploader = _RecordingUploader();
-      final controller = XiangjiSessionController(
-        bridge: bridge,
-        uploader: uploader,
-        endpointText: 'http://127.0.0.1:8080/api/camera/segments',
-        streamIdText: 'unit-stream',
-        fragmentDurationText: '2000',
-      );
+  test('controller starts one WebRTC live publisher session', () async {
+    final bridge = _TestBridge();
+    final livePublisher = _RecordingLivePublisher();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      livePublisher: livePublisher,
+      endpointText: 'http://127.0.0.1:8080/whip/unit-stream',
+      streamIdText: 'unit-stream',
+    );
 
-      await controller.initialize();
-      expect(controller.selectedVideoCameraCount, 2);
+    await controller.initialize();
+    expect(controller.selectedVideoCameraCount, 2);
 
-      await controller.start();
+    await controller.start();
+    await Future<void>.delayed(Duration.zero);
 
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(controller.phase, SessionPhase.streaming);
+    expect(controller.isLiveStreaming, isTrue);
+    expect(livePublisher.startConfigs, hasLength(1));
+    expect(livePublisher.startConfigs.single.endpoint.path, '/whip/unit-stream');
+    expect(livePublisher.startConfigs.single.streamId, 'unit-stream');
+    expect(
+      livePublisher.startConfigs.single.cameraName,
+      'Unit Test Camera 1',
+    );
+    expect(bridge.startRequests, isEmpty);
 
-      expect(controller.phase, SessionPhase.streaming);
-      expect(bridge.startRequests, hasLength(2));
-      expect(controller.uploadedSegments, 2);
-      expect(uploader.uploads, hasLength(2));
-      expect(
-        uploader.uploads.map((_UploadCall upload) => upload.segment.deviceId),
-        containsAll(<String>['usb-1', 'usb-2']),
-      );
-      expect(
-        uploader.uploads.map((_UploadCall upload) => upload.segment.streamId),
-        containsAll(<String>['unit-stream-01', 'unit-stream-02']),
-      );
-
-      controller.dispose();
-    },
-  );
+    controller.dispose();
+  });
 
   test('controller distinguishes USB devices from video cameras', () async {
     final bridge = _TestBridge(
@@ -63,6 +58,7 @@ void main() {
     final controller = XiangjiSessionController(
       bridge: bridge,
       uploader: _RecordingUploader(),
+      livePublisher: _RecordingLivePublisher(),
     );
 
     await controller.initialize();
@@ -77,10 +73,12 @@ void main() {
 
   test('controller keeps stop available after a stale ready status', () async {
     final bridge = _TestBridge();
+    final livePublisher = _RecordingLivePublisher();
     final controller = XiangjiSessionController(
       bridge: bridge,
       uploader: _RecordingUploader(),
-      endpointText: 'http://127.0.0.1:8080/api/camera/segments',
+      livePublisher: livePublisher,
+      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
     );
 
     await controller.initialize();
@@ -92,16 +90,54 @@ void main() {
     bridge.emitStatus(SessionPhase.ready, '设备列表已刷新。');
     await Future<void>.delayed(Duration.zero);
 
-    expect(controller.phase, SessionPhase.ready);
+    expect(controller.phase, SessionPhase.streaming);
     expect(controller.canStop, isTrue);
 
     await controller.stop();
 
-    expect(bridge.stopRequests, 1);
+    expect(bridge.stopRequests, 0);
+    expect(livePublisher.stopRequests, 1);
     expect(controller.canStop, isFalse);
 
     controller.dispose();
   });
+}
+
+class _RecordingLivePublisher implements LiveStreamPublisher {
+  final StreamController<LivePublisherStatus> _statuses =
+      StreamController<LivePublisherStatus>.broadcast();
+  final List<LiveStreamConfig> startConfigs = <LiveStreamConfig>[];
+  int stopRequests = 0;
+
+  @override
+  Stream<LivePublisherStatus> get statuses => _statuses.stream;
+
+  @override
+  Future<void> start(LiveStreamConfig config) async {
+    startConfigs.add(config);
+    _statuses.add(
+      const LivePublisherStatus(
+        phase: LivePublisherPhase.streaming,
+        message: '测试推流中',
+      ),
+    );
+  }
+
+  @override
+  Future<void> stop() async {
+    stopRequests += 1;
+    _statuses.add(
+      const LivePublisherStatus(
+        phase: LivePublisherPhase.stopped,
+        message: '测试推流已停止',
+      ),
+    );
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _statuses.close();
+  }
 }
 
 class _TestBridge implements CameraBridge {
@@ -178,7 +214,7 @@ class _TestBridge implements CameraBridge {
       ),
     );
     _events.add(
-      CameraStatusEvent(phase: SessionPhase.streaming, message: '录制中'),
+      CameraStatusEvent(phase: SessionPhase.streaming, message: '进行中'),
     );
   }
 
@@ -198,14 +234,11 @@ class _TestBridge implements CameraBridge {
 }
 
 class _RecordingUploader implements SegmentUploader {
-  final List<_UploadCall> uploads = <_UploadCall>[];
-
   @override
   Future<UploadReceipt> uploadSegment({
     required CameraSegment segment,
     required UploadTarget target,
   }) async {
-    uploads.add(_UploadCall(segment: segment, target: target));
     return UploadReceipt(
       endpoint: target.endpoint,
       statusCode: 200,
@@ -216,11 +249,4 @@ class _RecordingUploader implements SegmentUploader {
 
   @override
   Future<void> dispose() async {}
-}
-
-class _UploadCall {
-  const _UploadCall({required this.segment, required this.target});
-
-  final CameraSegment segment;
-  final UploadTarget target;
 }

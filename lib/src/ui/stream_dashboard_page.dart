@@ -15,7 +15,6 @@ class StreamDashboardPage extends StatefulWidget {
 class _StreamDashboardPageState extends State<StreamDashboardPage> {
   late final TextEditingController _endpointController;
   late final TextEditingController _streamIdController;
-  late final TextEditingController _fragmentController;
   late final ScrollController _logScrollController;
   _LogFilter _selectedLogFilter = _LogFilter.all;
 
@@ -26,9 +25,6 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
     super.initState();
     _endpointController = TextEditingController(text: controller.endpointText);
     _streamIdController = TextEditingController(text: controller.streamIdText);
-    _fragmentController = TextEditingController(
-      text: controller.fragmentDurationText,
-    );
     _logScrollController = ScrollController();
   }
 
@@ -36,7 +32,6 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
   void dispose() {
     _endpointController.dispose();
     _streamIdController.dispose();
-    _fragmentController.dispose();
     _logScrollController.dispose();
     super.dispose();
   }
@@ -54,11 +49,6 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                 tooltip: '刷新设备',
                 onPressed: controller.refreshDevices,
                 icon: const Icon(Icons.refresh),
-              ),
-              IconButton(
-                tooltip: '重试上传',
-                onPressed: controller.retryPendingUploads,
-                icon: const Icon(Icons.restart_alt),
               ),
             ],
           ),
@@ -159,29 +149,21 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                     : '无',
               ),
               _StatTile(
-                icon: Icons.cloud_upload,
-                label: '待上传',
-                value: controller.pendingUploadCount.toString(),
+                icon: controller.isLiveStreaming
+                    ? Icons.sensors
+                    : Icons.sensors_off,
+                label: '实时',
+                value: controller.isLiveStreaming ? '在线' : '离线',
               ),
               _StatTile(
-                icon: Icons.done,
-                label: '已上传',
-                value: controller.uploadedSegments.toString(),
+                icon: Icons.badge_outlined,
+                label: '流 ID',
+                value: controller.streamIdText,
               ),
               _StatTile(
-                icon: Icons.error_outline,
-                label: '失败',
-                value: controller.failedSegments.toString(),
-              ),
-              _StatTile(
-                icon: Icons.movie_creation_outlined,
-                label: '最近视频',
-                value: _formatClock(controller.lastSegmentAt),
-              ),
-              _StatTile(
-                icon: Icons.upload_file,
-                label: '最近上传',
-                value: _formatClock(controller.lastUploadAt),
+                icon: Icons.schedule,
+                label: '最近推流',
+                value: _formatClock(controller.lastLiveEventAt),
               ),
             ],
           ),
@@ -250,9 +232,9 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
 
   Widget _configSection(BuildContext context) {
     return _Section(
-      title: '上传地址',
+      title: 'WebRTC 地址',
       subtitle: controller.isEndpointValid
-          ? '上传器会把每路摄像头的分片作为原始 MP4 请求体发送。'
+          ? '机器人端会通过 WHIP 把一路 WebRTC 实时流推到服务端。'
           : '开始前请输入有效的 HTTP 或 HTTPS 地址。',
       child: Column(
         children: <Widget>[
@@ -260,41 +242,22 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
             controller: _endpointController,
             onChanged: controller.updateEndpointText,
             decoration: const InputDecoration(
-              labelText: '地址',
-              hintText: 'http://server:8080/api/camera/segments',
+              labelText: 'WHIP 地址',
+              hintText: 'http://server:8080/whip/camera-001',
               border: OutlineInputBorder(),
             ),
             keyboardType: TextInputType.url,
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: TextField(
-                  controller: _streamIdController,
-                  onChanged: controller.updateStreamIdText,
-                  decoration: const InputDecoration(
-                    labelText: '流 ID',
-                    border: OutlineInputBorder(),
-                  ),
-                  textInputAction: TextInputAction.next,
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 180,
-                child: TextField(
-                  controller: _fragmentController,
-                  onChanged: controller.updateFragmentDurationText,
-                  decoration: const InputDecoration(
-                    labelText: '分片毫秒',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-            ],
+          TextField(
+            controller: _streamIdController,
+            onChanged: controller.updateStreamIdText,
+            decoration: const InputDecoration(
+              labelText: '流 ID',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
           ),
         ],
       ),
@@ -433,7 +396,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
     return _Section(
       title: '日志',
       subtitle: latestLog == null
-          ? '这里会显示摄像头、录制和上传事件。'
+          ? '这里会显示摄像头、推流和系统事件。'
           : '最新：${latestLog.message}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -500,7 +463,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
       _LogFilter.all => '全部',
       _LogFilter.device => '设备',
       _LogFilter.permission => '权限',
-      _LogFilter.session => '录制',
+      _LogFilter.session => '推流',
       _LogFilter.upload => '上传',
       _LogFilter.errors => '错误',
     };
@@ -556,10 +519,10 @@ class _ProcessFlow extends StatelessWidget {
         state: _videoState(selectedDevices),
       ),
       _FlowStep(
-        icon: Icons.cloud_upload,
-        label: '上传',
-        value: _uploadValue(),
-        state: _uploadState(),
+        icon: Icons.sensors,
+        label: 'WebRTC',
+        value: _liveValue(),
+        state: _liveState(),
       ),
     ];
 
@@ -652,7 +615,7 @@ class _ProcessFlow extends StatelessWidget {
     }
     return switch (controller.phase) {
       SessionPhase.starting => '启动中',
-      SessionPhase.streaming => '录制中',
+      SessionPhase.streaming => '推流中',
       SessionPhase.stopping => '停止中',
       SessionPhase.error => '错误',
       _ => '${controller.selectedVideoCameraCount} 路待启动',
@@ -681,30 +644,32 @@ class _ProcessFlow extends StatelessWidget {
     return _FlowState.blocked;
   }
 
-  String _uploadValue() {
-    if (controller.isUploading) {
-      return '上传中';
+  String _liveValue() {
+    if (!controller.isEndpointValid) {
+      return '地址无效';
     }
-    if (controller.pendingUploadCount > 0) {
-      return '待上传 ${controller.pendingUploadCount} 个';
+    if (controller.phase == SessionPhase.starting) {
+      return '连接中';
     }
-    if (controller.uploadedSegments > 0) {
-      return '最近 ${_formatClock(controller.lastUploadAt)}';
+    if (controller.phase == SessionPhase.streaming) {
+      return '在线';
+    }
+    if (controller.phase == SessionPhase.stopping) {
+      return '停止中';
     }
     return '等待中';
   }
 
-  _FlowState _uploadState() {
-    if (controller.failedSegments > 0 && controller.uploadedSegments == 0) {
+  _FlowState _liveState() {
+    if (!controller.isEndpointValid || controller.phase == SessionPhase.error) {
       return _FlowState.error;
     }
-    if (controller.isUploading || controller.pendingUploadCount > 0) {
+    if (controller.phase == SessionPhase.starting ||
+        controller.phase == SessionPhase.streaming ||
+        controller.phase == SessionPhase.stopping) {
       return _FlowState.active;
     }
-    if (controller.uploadedSegments > 0) {
-      return _FlowState.done;
-    }
-    if (controller.phase == SessionPhase.streaming) {
+    if (controller.hasSelectedVideoCamera) {
       return _FlowState.idle;
     }
     return _FlowState.blocked;
@@ -797,23 +762,19 @@ class _LogOverview extends StatelessWidget {
       runSpacing: 8,
       children: <Widget>[
         _MiniStatus(
-          icon: Icons.videocam,
-          label: '录制',
-          value: controller.phase == SessionPhase.streaming ? '进行中' : '空闲',
+          icon: Icons.sensors,
+          label: '实时',
+          value: controller.isLiveStreaming ? '在线' : '空闲',
         ),
         _MiniStatus(
-          icon: Icons.cloud_upload,
-          label: '上传',
-          value: controller.isUploading
-              ? '进行中'
-              : controller.pendingUploadCount > 0
-              ? '排队中'
-              : '空闲',
+          icon: Icons.http,
+          label: '地址',
+          value: controller.isEndpointValid ? '有效' : '无效',
         ),
         _MiniStatus(
           icon: Icons.schedule,
-          label: '最近上传',
-          value: _formatClock(controller.lastUploadAt),
+          label: '最近推流',
+          value: _formatClock(controller.lastLiveEventAt),
         ),
       ],
     );
@@ -1033,7 +994,7 @@ class _LogRow extends StatelessWidget {
       LogTopic.system => '系统',
       LogTopic.device => '设备',
       LogTopic.permission => '权限',
-      LogTopic.session => '录制',
+      LogTopic.session => '推流',
       LogTopic.upload => '上传',
       LogTopic.error => '错误',
     };
