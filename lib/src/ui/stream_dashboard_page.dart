@@ -248,7 +248,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
                       !controller.isEndpointValid
                   ? '请输入 HTTP 或 HTTPS 地址'
                   : null,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
             keyboardType: TextInputType.url,
             textInputAction: TextInputAction.next,
@@ -261,7 +261,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
               labelText: '流 ID',
               helperText: '建议和地址末尾保持一致，例如 camera-001。',
               errorText: controller.isStreamIdValid ? null : '流 ID 不能包含空白字符',
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
             ),
             textInputAction: TextInputAction.done,
           ),
