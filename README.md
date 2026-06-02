@@ -67,6 +67,34 @@ v=0
 网页端实时观看不直接连机器人 app，而是连接服务端/SFU/gateway 提供的播放入口
 （例如 WHEP、WebRTC viewer 页面或服务端自定义 signaling）。
 
+## Python 接收示例
+
+仓库提供了一个最小 WHIP 接收端示例：`examples/whip_receiver.py`。它会接收
+Flutter 端发来的 SDP offer，返回 SDP answer，并消费视频轨，控制台每收到约
+30 帧打印一次帧统计。
+
+```bash
+python3 -m venv .venv-whip
+source .venv-whip/bin/activate
+pip install -r examples/requirements-whip-receiver.txt
+python examples/whip_receiver.py --host 0.0.0.0 --port 8080
+```
+
+应用端的 WebRTC 地址填写：
+
+```text
+http://<接收端机器 IP>:8080/whip/camera-001
+```
+
+如果是在同一台电脑的模拟环境测试，也可以填：
+
+```text
+http://127.0.0.1:8080/whip/camera-001
+```
+
+旧的 MP4 分片上传代码是普通 HTTP `POST video/mp4` 接收，不是当前默认启动流程；
+当前实时链路请优先使用这个 WHIP 接收示例。
+
 ## Verify
 
 ```bash
