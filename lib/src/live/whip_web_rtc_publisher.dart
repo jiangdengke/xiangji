@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
@@ -9,11 +10,16 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
   WhipWebRtcPublisher({
     http.Client? client,
     this.signalingTimeout = const Duration(seconds: 15),
+    this.preflightTimeout = const Duration(seconds: 3),
     this.iceGatheringTimeout = const Duration(seconds: 5),
-  }) : _client = client ?? http.Client();
+    Future<void> Function(Uri endpoint, Duration timeout)? endpointProbe,
+  }) : _client = client ?? http.Client(),
+       _endpointProbe = endpointProbe ?? _probeEndpoint;
 
   final http.Client _client;
+  final Future<void> Function(Uri endpoint, Duration timeout) _endpointProbe;
   final Duration signalingTimeout;
+  final Duration preflightTimeout;
   final Duration iceGatheringTimeout;
   final StreamController<LivePublisherStatus> _statuses =
       StreamController<LivePublisherStatus>.broadcast();
@@ -47,6 +53,7 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
     );
 
     try {
+      await _preflightEndpoint(config);
       final stream = await navigator.mediaDevices.getUserMedia(
         _mediaConstraints(config),
       );
@@ -89,7 +96,11 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
             : 'WebRTC 实时推流已建立，停止时会释放 WHIP 会话。',
       );
     } catch (error, stackTrace) {
-      await _cleanup();
+      try {
+        await _cleanup();
+      } catch (cleanupError) {
+        _emit(LivePublisherPhase.error, 'WebRTC 推流清理失败。', cleanupError);
+      }
       _emit(LivePublisherPhase.error, 'WebRTC 实时推流启动失败。', error);
       Error.throwWithStackTrace(error, stackTrace);
     }
@@ -206,18 +217,27 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
     required LiveStreamConfig config,
     required String sdp,
   }) async {
-    final response = await _client
-        .post(
-          config.endpoint,
-          headers: <String, String>{
-            ..._signalingHeaders(),
-            'Accept': 'application/sdp',
-            'Content-Type': 'application/sdp',
-            'X-Stream-Id': config.streamId,
-          },
-          body: sdp,
-        )
-        .timeout(signalingTimeout);
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            config.endpoint,
+            headers: <String, String>{
+              ..._signalingHeaders(),
+              'Accept': 'application/sdp',
+              'Content-Type': 'application/sdp',
+              'X-Stream-Id': config.streamId,
+            },
+            body: sdp,
+          )
+          .timeout(signalingTimeout);
+    } on TimeoutException catch (error) {
+      throw WhipSignalingException('连接 WHIP 地址超时，请检查 IP、端口和网络。', error);
+    } on http.ClientException catch (error) {
+      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error.message);
+    } catch (error) {
+      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error);
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw WhipSignalingException(
@@ -226,6 +246,36 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
       );
     }
     return response;
+  }
+
+  Future<void> _preflightEndpoint(LiveStreamConfig config) async {
+    try {
+      await _endpointProbe(config.endpoint, preflightTimeout);
+    } on TimeoutException catch (error) {
+      throw WhipSignalingException('连接 WHIP 地址超时，请检查 IP、端口和网络。', error);
+    } on SocketException catch (error) {
+      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error.message);
+    } on WhipSignalingException {
+      rethrow;
+    } catch (error) {
+      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error);
+    }
+  }
+
+  static Future<void> _probeEndpoint(Uri endpoint, Duration timeout) async {
+    final socket = await Socket.connect(
+      endpoint.host,
+      _endpointPort(endpoint),
+      timeout: timeout,
+    );
+    socket.destroy();
+  }
+
+  static int _endpointPort(Uri endpoint) {
+    if (endpoint.hasPort) {
+      return endpoint.port;
+    }
+    return endpoint.isScheme('https') ? 443 : 80;
   }
 
   Map<String, String> _signalingHeaders() {

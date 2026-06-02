@@ -116,7 +116,8 @@ class XiangjiSessionController extends ChangeNotifier {
     final uri = Uri.tryParse(_endpointText);
     return uri != null &&
         uri.hasScheme &&
-        (uri.isScheme('http') || uri.isScheme('https'));
+        (uri.isScheme('http') || uri.isScheme('https')) &&
+        uri.host.trim().isNotEmpty;
   }
 
   bool get isStreamIdValid {
@@ -914,7 +915,8 @@ class XiangjiSessionController extends ChangeNotifier {
     final endpoint = Uri.tryParse(_endpointText);
     if (endpoint == null ||
         !endpoint.hasScheme ||
-        (!endpoint.isScheme('http') && !endpoint.isScheme('https'))) {
+        (!endpoint.isScheme('http') && !endpoint.isScheme('https')) ||
+        endpoint.host.trim().isEmpty) {
       return null;
     }
     return endpoint;
@@ -938,7 +940,8 @@ class XiangjiSessionController extends ChangeNotifier {
     final endpoint = Uri.tryParse(_endpointText);
     if (endpoint == null ||
         !endpoint.hasScheme ||
-        (!endpoint.isScheme('http') && !endpoint.isScheme('https'))) {
+        (!endpoint.isScheme('http') && !endpoint.isScheme('https')) ||
+        endpoint.host.trim().isEmpty) {
       return null;
     }
 

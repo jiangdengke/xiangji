@@ -7,6 +7,7 @@ import 'package:xiangji/src/bridge/camera_bridge.dart';
 import 'package:xiangji/src/controller/xiangji_session_controller.dart';
 import 'package:xiangji/src/domain.dart';
 import 'package:xiangji/src/live/live_stream_publisher.dart';
+import 'package:xiangji/src/live/whip_web_rtc_publisher.dart';
 import 'package:xiangji/src/upload/segment_uploader.dart';
 
 void main() {
@@ -194,6 +195,90 @@ void main() {
     controller.dispose();
   });
 
+  test('controller logs WHIP connection failure without crashing', () async {
+    final bridge = _TestBridge();
+    final livePublisher = _ConnectionFailingLivePublisher();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      livePublisher: livePublisher,
+      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
+    );
+
+    await controller.initialize();
+    await controller.start();
+
+    expect(livePublisher.startRequests, 1);
+    expect(controller.phase, SessionPhase.error);
+    expect(controller.isLiveStreaming, isFalse);
+    expect(controller.lastError, contains('无法连接 WHIP 地址'));
+    expect(controller.logs.map((entry) => entry.message), contains(
+      contains('启动失败'),
+    ));
+
+    controller.dispose();
+  });
+
+  test('controller rejects WHIP endpoint without a host', () async {
+    final bridge = _TestBridge();
+    final livePublisher = _RecordingLivePublisher();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      livePublisher: livePublisher,
+      endpointText: 'http://',
+    );
+
+    await controller.initialize();
+
+    expect(controller.isEndpointValid, isFalse);
+    expect(controller.canStart, isFalse);
+
+    await controller.start();
+
+    expect(livePublisher.startConfigs, isEmpty);
+    expect(
+      controller.latestLog?.message,
+      contains('请输入有效的 HTTP 或 HTTPS WebRTC 推流地址'),
+    );
+
+    controller.dispose();
+  });
+
+  test('WHIP publisher reports unreachable endpoint before media capture', () async {
+    final publisher = WhipWebRtcPublisher(
+      preflightTimeout: const Duration(milliseconds: 10),
+      endpointProbe: (Uri endpoint, Duration timeout) async {
+        throw const SocketException('Connection refused');
+      },
+    );
+    final statuses = <LivePublisherStatus>[];
+    final subscription = publisher.statuses.listen(statuses.add);
+
+    await expectLater(
+      publisher.start(
+        LiveStreamConfig(
+          endpoint: Uri.parse('http://127.0.0.1:65535/whip/camera-001'),
+          streamId: 'camera-001',
+        ),
+      ),
+      throwsA(isA<WhipSignalingException>()),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      statuses.map((status) => status.message),
+      contains('WebRTC 实时推流启动失败。'),
+    );
+    expect(
+      statuses.map((status) => status.details.toString()),
+      contains(contains('无法连接 WHIP 地址')),
+    );
+
+    await subscription.cancel();
+    await publisher.dispose();
+  });
+
   test('controller keeps stop available after a stale ready status', () async {
     final bridge = _TestBridge();
     final livePublisher = _RecordingLivePublisher();
@@ -275,6 +360,37 @@ class _FailingLivePublisher implements LiveStreamPublisher {
   Future<void> start(LiveStreamConfig config) async {
     startRequests += 1;
     throw StateError('测试推流失败');
+  }
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {
+    await _statuses.close();
+  }
+}
+
+class _ConnectionFailingLivePublisher implements LiveStreamPublisher {
+  final StreamController<LivePublisherStatus> _statuses =
+      StreamController<LivePublisherStatus>.broadcast();
+  int startRequests = 0;
+
+  @override
+  Stream<LivePublisherStatus> get statuses => _statuses.stream;
+
+  @override
+  Future<void> start(LiveStreamConfig config) async {
+    startRequests += 1;
+    const error = WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。');
+    _statuses.add(
+      const LivePublisherStatus(
+        phase: LivePublisherPhase.error,
+        message: 'WebRTC 实时推流启动失败。',
+        details: error,
+      ),
+    );
+    throw error;
   }
 
   @override
