@@ -35,6 +35,8 @@ class XiangjiSessionController extends ChangeNotifier {
 
   final Queue<_QueuedSegment> _pendingSegments = Queue<_QueuedSegment>();
   final List<StreamLogEntry> _logs = <StreamLogEntry>[];
+  final Map<String, String> _streamIdsByDeviceId = <String, String>{};
+  final Set<String> _customStreamIdDeviceIds = <String>{};
 
   Timer? _retryTimer;
   bool _bridgeSupported = false;
@@ -107,6 +109,8 @@ class XiangjiSessionController extends ChangeNotifier {
   String get endpointText => _endpointText;
   String get streamIdText => _streamIdText;
   String get fragmentDurationText => _fragmentDurationText;
+  Map<String, String> get streamIdsByDeviceId =>
+      Map<String, String>.unmodifiable(_streamIdsByDeviceId);
 
   bool get isEndpointValid {
     final uri = Uri.tryParse(_endpointText);
@@ -116,8 +120,24 @@ class XiangjiSessionController extends ChangeNotifier {
   }
 
   bool get isStreamIdValid {
-    final value = _streamIdText.trim();
-    return value.isNotEmpty && !value.contains(RegExp(r'\s'));
+    return _isStreamIdValueValid(_streamIdText);
+  }
+
+  bool get hasValidSelectedStreamIds {
+    return selectedVideoDevices.every((UsbCameraDevice device) {
+      return isDeviceStreamIdValid(device.deviceId);
+    });
+  }
+
+  bool get hasUniqueSelectedStreamIds {
+    final seen = <String>{};
+    for (final device in selectedVideoDevices) {
+      final streamId = streamIdForDeviceId(device.deviceId);
+      if (!seen.add(streamId)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   bool get canStart {
@@ -127,7 +147,9 @@ class XiangjiSessionController extends ChangeNotifier {
         phase != SessionPhase.streaming &&
         phase != SessionPhase.stopping &&
         isEndpointValid &&
-        isStreamIdValid;
+        isStreamIdValid &&
+        hasValidSelectedStreamIds &&
+        hasUniqueSelectedStreamIds;
   }
 
   bool get canStop {
@@ -276,6 +298,27 @@ class XiangjiSessionController extends ChangeNotifier {
 
   void updateStreamIdText(String value) {
     _streamIdText = value.trim();
+    _syncGeneratedStreamIds();
+    notifyListeners();
+  }
+
+  void updateDeviceStreamIdText(String deviceId, String value) {
+    if (!_streamIdsByDeviceId.containsKey(deviceId)) {
+      return;
+    }
+
+    _streamIdsByDeviceId[deviceId] = value.trim();
+    _customStreamIdDeviceIds.add(deviceId);
+    notifyListeners();
+  }
+
+  void resetDeviceStreamId(String deviceId) {
+    if (!_streamIdsByDeviceId.containsKey(deviceId)) {
+      return;
+    }
+
+    _customStreamIdDeviceIds.remove(deviceId);
+    _syncGeneratedStreamIds();
     notifyListeners();
   }
 
@@ -352,15 +395,37 @@ class XiangjiSessionController extends ChangeNotifier {
 
     if (!isStreamIdValid) {
       _appendLog(
-        '流 ID 不能为空，也不能包含空白字符。',
+        '默认流 ID 前缀不能为空，也不能包含空白字符。',
         LogLevel.warning,
         topic: LogTopic.session,
       );
       return;
     }
 
-    final endpoint = _buildLiveEndpoint();
-    if (endpoint == null) {
+    final invalidStreamIdDevices = selectedCameras.where((
+      UsbCameraDevice device,
+    ) {
+      return !isDeviceStreamIdValid(device.deviceId);
+    }).toList(growable: false);
+    if (invalidStreamIdDevices.isNotEmpty) {
+      _appendLog(
+        '有 ${invalidStreamIdDevices.length} 路摄像头的流 ID 无效，请先修正。',
+        LogLevel.warning,
+        topic: LogTopic.session,
+      );
+      return;
+    }
+    if (!hasUniqueSelectedStreamIds) {
+      _appendLog(
+        '选中摄像头的流 ID 不能重复，请先修正。',
+        LogLevel.warning,
+        topic: LogTopic.session,
+      );
+      return;
+    }
+
+    final baseEndpoint = _buildLiveEndpoint();
+    if (baseEndpoint == null) {
       _appendLog(
         '请输入有效的 HTTP 或 HTTPS WebRTC 推流地址。',
         LogLevel.warning,
@@ -385,14 +450,15 @@ class XiangjiSessionController extends ChangeNotifier {
 
     _pendingStartAfterPermission = false;
     final camera = selectedCameras.first;
-    final streamId = _streamIdForDevice(index: 0, total: 1);
+    final streamId = streamIdForDeviceId(camera.deviceId);
+    final endpoint = _endpointForStreamId(baseEndpoint, streamId);
     _phase = SessionPhase.starting;
     _statusMessage = '正在从 ${camera.deviceName} 启动 WebRTC 实时推流。';
     notifyListeners();
 
     if (selectedCameras.length > 1) {
       _appendLog(
-        '实时预览当前先推一路，使用 ${camera.deviceName}。',
+        '实时预览当前先推一路，使用 ${camera.deviceName}，流 ID：$streamId。',
         LogLevel.info,
         topic: LogTopic.session,
       );
@@ -587,6 +653,8 @@ class XiangjiSessionController extends ChangeNotifier {
     _devices = List<UsbCameraDevice>.unmodifiable(devices);
     if (_devices.isEmpty) {
       _selectedDeviceIds.clear();
+      _streamIdsByDeviceId.clear();
+      _customStreamIdDeviceIds.clear();
       return;
     }
 
@@ -597,6 +665,13 @@ class XiangjiSessionController extends ChangeNotifier {
     _selectedDeviceIds.removeWhere((String deviceId) {
       return !selectableDeviceIds.contains(deviceId);
     });
+    _streamIdsByDeviceId.removeWhere((String deviceId, _) {
+      return !selectableDeviceIds.contains(deviceId);
+    });
+    _customStreamIdDeviceIds.removeWhere((String deviceId) {
+      return !selectableDeviceIds.contains(deviceId);
+    });
+    _syncGeneratedStreamIds();
 
     if (!_selectionInitialized) {
       final videoDeviceIds = selectableDeviceIds.toList(growable: false);
@@ -671,8 +746,58 @@ class XiangjiSessionController extends ChangeNotifier {
     };
   }
 
-  String _streamIdForDevice({required int index, required int total}) {
-    final base = _streamIdText.trim().isEmpty ? 'camera-001' : _streamIdText;
+  String streamIdForDeviceId(String deviceId) {
+    return _streamIdsByDeviceId[deviceId] ?? '';
+  }
+
+  bool isDeviceStreamIdValid(String deviceId) {
+    return _isStreamIdValueValid(streamIdForDeviceId(deviceId));
+  }
+
+  bool isDeviceStreamIdDuplicate(String deviceId) {
+    if (!_selectedDeviceIds.contains(deviceId)) {
+      return false;
+    }
+    final streamId = streamIdForDeviceId(deviceId);
+    var count = 0;
+    for (final device in selectedVideoDevices) {
+      if (streamIdForDeviceId(device.deviceId) == streamId) {
+        count += 1;
+      }
+    }
+    return count > 1;
+  }
+
+  bool isDeviceStreamIdCustom(String deviceId) {
+    return _customStreamIdDeviceIds.contains(deviceId);
+  }
+
+  bool _isStreamIdValueValid(String value) {
+    final trimmed = value.trim();
+    return trimmed.isNotEmpty && !trimmed.contains(RegExp(r'\s'));
+  }
+
+  void _syncGeneratedStreamIds() {
+    final videoDevices = _devices
+        .where((UsbCameraDevice device) => device.videoClass)
+        .toList(growable: false);
+    for (var index = 0; index < videoDevices.length; index += 1) {
+      final device = videoDevices[index];
+      if (_customStreamIdDeviceIds.contains(device.deviceId)) {
+        continue;
+      }
+      _streamIdsByDeviceId[device.deviceId] = _defaultStreamIdForDevice(
+        index: index,
+        total: videoDevices.length,
+      );
+    }
+  }
+
+  String _defaultStreamIdForDevice({required int index, required int total}) {
+    final base = _streamIdText.trim();
+    if (base.isEmpty) {
+      return '';
+    }
     if (total <= 1) {
       return base;
     }
@@ -793,6 +918,20 @@ class XiangjiSessionController extends ChangeNotifier {
       return null;
     }
     return endpoint;
+  }
+
+  Uri _endpointForStreamId(Uri endpoint, String streamId) {
+    final pathSegments = endpoint.pathSegments.toList(growable: true);
+    if (pathSegments.isEmpty) {
+      pathSegments.add(streamId);
+    } else if (pathSegments.last.isEmpty) {
+      pathSegments[pathSegments.length - 1] = streamId;
+    } else if (pathSegments.length == 1 && pathSegments.single == 'whip') {
+      pathSegments.add(streamId);
+    } else {
+      pathSegments[pathSegments.length - 1] = streamId;
+    }
+    return endpoint.replace(pathSegments: pathSegments);
   }
 
   UploadTarget? _buildUploadTarget() {

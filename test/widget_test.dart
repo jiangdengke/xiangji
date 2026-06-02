@@ -46,6 +46,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('WebRTC 地址'), findsOneWidget);
+    expect(find.text('默认流 ID 前缀'), findsOneWidget);
     expect(find.text('USB 设备'), findsWidgets);
 
     await tester.scrollUntilVisible(
@@ -57,6 +58,7 @@ void main() {
 
     expect(find.text('模拟 UVC 摄像头 1'), findsOneWidget);
     expect(find.text('模拟 UVC 摄像头 2'), findsOneWidget);
+    expect(find.text('该摄像头流 ID'), findsWidgets);
   });
 }
 

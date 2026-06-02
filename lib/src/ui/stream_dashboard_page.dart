@@ -157,7 +157,7 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
               ),
               _StatTile(
                 icon: Icons.badge_outlined,
-                label: '流 ID',
+                label: 'ID 前缀',
                 value: controller.streamIdText,
               ),
               _StatTile(
@@ -258,9 +258,11 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
             controller: _streamIdController,
             onChanged: controller.updateStreamIdText,
             decoration: InputDecoration(
-              labelText: '流 ID',
-              helperText: '建议和地址末尾保持一致，例如 camera-001。',
-              errorText: controller.isStreamIdValid ? null : '流 ID 不能包含空白字符',
+              labelText: '默认流 ID 前缀',
+              helperText: '检测到多路摄像头时会生成 camera-001-01、camera-001-02，可在设备卡片里单独修改。',
+              errorText: controller.isStreamIdValid
+                  ? null
+                  : '默认流 ID 前缀不能为空，也不能包含空白字符',
               border: const OutlineInputBorder(),
             ),
             textInputAction: TextInputAction.done,
@@ -278,9 +280,15 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
       return '地址无效，请使用 HTTP 或 HTTPS WHIP 地址。';
     }
     if (!controller.isStreamIdValid) {
-      return '流 ID 不能为空，也不能包含空白字符。';
+      return '默认流 ID 前缀不能为空，也不能包含空白字符。';
     }
-    return '机器人端会通过 WHIP 把一路 WebRTC 实时流推到服务端。';
+    if (!controller.hasValidSelectedStreamIds) {
+      return '选中摄像头里有无效流 ID，请在设备卡片里修正。';
+    }
+    if (!controller.hasUniqueSelectedStreamIds) {
+      return '选中摄像头的流 ID 不能重复。';
+    }
+    return '每路摄像头可配置独立流 ID；当前实时 WebRTC 启动流程先推选中的第一路。';
   }
 
   Widget _devicesSection(BuildContext context) {
@@ -298,110 +306,10 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: devices
                   .map((UsbCameraDevice device) {
-                    final selected = controller.isDeviceSelected(
-                      device.deviceId,
-                    );
-                    final selectable = device.videoClass;
-                    final scheme = Theme.of(context).colorScheme;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: InkWell(
-                        onTap: selectable
-                            ? () => controller.toggleDeviceSelection(
-                                device.deviceId,
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? scheme.primary.withValues(alpha: 0.06)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: selected
-                                  ? scheme.primary
-                                  : scheme.outlineVariant,
-                            ),
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: <Widget>[
-                              Checkbox(
-                                value: selected,
-                                onChanged: selectable
-                                    ? (bool? value) {
-                                        controller.setDeviceSelected(
-                                          device.deviceId,
-                                          value ?? false,
-                                        );
-                                      }
-                                    : null,
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                device.videoClass ? Icons.videocam : Icons.usb,
-                                color: selected
-                                    ? scheme.primary
-                                    : scheme.outline,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    Text(
-                                      device.deviceName,
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'VID ${device.vendorId.toRadixString(16).padLeft(4, '0')} '
-                                      'PID ${device.productId.toRadixString(16).padLeft(4, '0')} '
-                                      'IF ${device.interfaceCount}',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: <Widget>[
-                                  Chip(
-                                    label: Text(
-                                      device.videoClass ? '摄像头' : '非摄像头',
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Chip(
-                                    label: Text(
-                                      device.videoClass
-                                          ? selected
-                                                ? '已选'
-                                                : '未选'
-                                          : '跳过',
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Chip(
-                                    label: Text(
-                                      device.permissionGranted ? '已授权' : '待授权',
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    return _DeviceCard(
+                      key: ValueKey<String>(device.deviceId),
+                      controller: controller,
+                      device: device,
                     );
                   })
                   .toList(growable: false),
@@ -712,6 +620,199 @@ class _FlowStep {
 enum _FlowState { idle, active, done, blocked, error }
 
 enum _LogFilter { all, device, permission, session, upload, errors }
+
+class _DeviceCard extends StatefulWidget {
+  const _DeviceCard({super.key, required this.controller, required this.device});
+
+  final XiangjiSessionController controller;
+  final UsbCameraDevice device;
+
+  @override
+  State<_DeviceCard> createState() => _DeviceCardState();
+}
+
+class _DeviceCardState extends State<_DeviceCard> {
+  late final TextEditingController _streamIdController;
+
+  XiangjiSessionController get controller => widget.controller;
+  UsbCameraDevice get device => widget.device;
+
+  @override
+  void initState() {
+    super.initState();
+    _streamIdController = TextEditingController(
+      text: controller.streamIdForDeviceId(device.deviceId),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeviceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncStreamIdText();
+  }
+
+  @override
+  void dispose() {
+    _streamIdController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = controller.isDeviceSelected(device.deviceId);
+    final selectable = device.videoClass;
+    final scheme = Theme.of(context).colorScheme;
+    final streamId = controller.streamIdForDeviceId(device.deviceId);
+    final validStreamId = !selectable || controller.isDeviceStreamIdValid(
+      device.deviceId,
+    );
+    final duplicateStreamId =
+        selectable && controller.isDeviceStreamIdDuplicate(device.deviceId);
+    final showStreamIdField = selectable;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.06)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? scheme.primary : scheme.outlineVariant,
+          ),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            InkWell(
+              onTap: selectable
+                  ? () => controller.toggleDeviceSelection(device.deviceId)
+                  : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Row(
+                children: <Widget>[
+                  Checkbox(
+                    value: selected,
+                    onChanged: selectable
+                        ? (bool? value) {
+                            controller.setDeviceSelected(
+                              device.deviceId,
+                              value ?? false,
+                            );
+                          }
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    device.videoClass ? Icons.videocam : Icons.usb,
+                    color: selected ? scheme.primary : scheme.outline,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          device.deviceName,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'VID ${device.vendorId.toRadixString(16).padLeft(4, '0')} '
+                          'PID ${device.productId.toRadixString(16).padLeft(4, '0')} '
+                          'IF ${device.interfaceCount}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Chip(
+                        label: Text(device.videoClass ? '摄像头' : '非摄像头'),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      const SizedBox(height: 4),
+                      Chip(
+                        label: Text(
+                          device.videoClass
+                              ? selected
+                                    ? '已选'
+                                    : '未选'
+                              : '跳过',
+                        ),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      const SizedBox(height: 4),
+                      Chip(
+                        label: Text(
+                          device.permissionGranted ? '已授权' : '待授权',
+                        ),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (showStreamIdField) ...<Widget>[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _streamIdController,
+                onChanged: (String value) {
+                  controller.updateDeviceStreamIdText(
+                    device.deviceId,
+                    value,
+                  );
+                },
+                decoration: InputDecoration(
+                  labelText: '该摄像头流 ID',
+                  helperText: selected
+                      ? '启动时会使用 /whip/$streamId 和 X-Stream-Id: $streamId。'
+                      : '未选中时不会启动这一路。',
+                  errorText: !validStreamId
+                      ? '流 ID 不能为空，也不能包含空白字符'
+                      : duplicateStreamId
+                      ? '选中摄像头的流 ID 不能重复'
+                      : null,
+                  suffixIcon:
+                      controller.isDeviceStreamIdCustom(device.deviceId)
+                      ? IconButton(
+                          tooltip: '恢复默认 ID',
+                          onPressed: () {
+                            controller.resetDeviceStreamId(device.deviceId);
+                          },
+                          icon: const Icon(Icons.restart_alt),
+                        )
+                      : null,
+                  border: const OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _syncStreamIdText() {
+    final value = controller.streamIdForDeviceId(device.deviceId);
+    if (_streamIdController.text == value) {
+      return;
+    }
+    _streamIdController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+}
 
 class _FlowStepTile extends StatelessWidget {
   const _FlowStepTile({required this.step});

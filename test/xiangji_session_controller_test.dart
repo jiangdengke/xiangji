@@ -10,7 +10,7 @@ import 'package:xiangji/src/live/live_stream_publisher.dart';
 import 'package:xiangji/src/upload/segment_uploader.dart';
 
 void main() {
-  test('controller starts one WebRTC live publisher session', () async {
+  test('controller starts WebRTC with the selected camera stream ID', () async {
     final bridge = _TestBridge();
     final livePublisher = _RecordingLivePublisher();
     final controller = XiangjiSessionController(
@@ -23,6 +23,8 @@ void main() {
 
     await controller.initialize();
     expect(controller.selectedVideoCameraCount, 2);
+    expect(controller.streamIdForDeviceId('usb-1'), 'unit-stream-01');
+    expect(controller.streamIdForDeviceId('usb-2'), 'unit-stream-02');
 
     await controller.start();
     await Future<void>.delayed(Duration.zero);
@@ -30,13 +32,85 @@ void main() {
     expect(controller.phase, SessionPhase.streaming);
     expect(controller.isLiveStreaming, isTrue);
     expect(livePublisher.startConfigs, hasLength(1));
-    expect(livePublisher.startConfigs.single.endpoint.path, '/whip/unit-stream');
-    expect(livePublisher.startConfigs.single.streamId, 'unit-stream');
+    expect(
+      livePublisher.startConfigs.single.endpoint.path,
+      '/whip/unit-stream-01',
+    );
+    expect(livePublisher.startConfigs.single.streamId, 'unit-stream-01');
     expect(
       livePublisher.startConfigs.single.cameraName,
       'Unit Test Camera 1',
     );
     expect(bridge.startRequests, isEmpty);
+
+    controller.dispose();
+  });
+
+  test('controller allows a custom stream ID per detected camera', () async {
+    final bridge = _TestBridge();
+    final livePublisher = _RecordingLivePublisher();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      livePublisher: livePublisher,
+      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
+      streamIdText: 'camera-001',
+    );
+
+    await controller.initialize();
+    controller
+      ..setDeviceSelected('usb-1', false)
+      ..updateDeviceStreamIdText('usb-2', 'loading-bay');
+
+    expect(controller.streamIdForDeviceId('usb-1'), 'camera-001-01');
+    expect(controller.streamIdForDeviceId('usb-2'), 'loading-bay');
+    expect(controller.isDeviceStreamIdCustom('usb-2'), isTrue);
+    expect(controller.canStart, isTrue);
+
+    await controller.start();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(livePublisher.startConfigs, hasLength(1));
+    expect(livePublisher.startConfigs.single.streamId, 'loading-bay');
+    expect(
+      livePublisher.startConfigs.single.endpoint.path,
+      '/whip/loading-bay',
+    );
+    expect(
+      livePublisher.startConfigs.single.cameraName,
+      'Unit Test Camera 2',
+    );
+
+    controller.dispose();
+  });
+
+  test('controller blocks duplicate selected camera stream IDs', () async {
+    final bridge = _TestBridge();
+    final livePublisher = _RecordingLivePublisher();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      livePublisher: livePublisher,
+      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
+      streamIdText: 'camera-001',
+    );
+
+    await controller.initialize();
+    controller.updateDeviceStreamIdText('usb-2', 'camera-001-01');
+
+    expect(controller.hasValidSelectedStreamIds, isTrue);
+    expect(controller.hasUniqueSelectedStreamIds, isFalse);
+    expect(controller.isDeviceStreamIdDuplicate('usb-1'), isTrue);
+    expect(controller.isDeviceStreamIdDuplicate('usb-2'), isTrue);
+    expect(controller.canStart, isFalse);
+
+    await controller.start();
+
+    expect(livePublisher.startConfigs, isEmpty);
+    expect(
+      controller.latestLog?.message,
+      contains('选中摄像头的流 ID 不能重复'),
+    );
 
     controller.dispose();
   });

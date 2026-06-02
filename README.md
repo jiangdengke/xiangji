@@ -4,7 +4,7 @@
 
 ## 已实现
 
-- Flutter 控制台，包含状态、摄像头选择、WebRTC 地址和日志。
+- Flutter 控制台，包含状态、摄像头选择、每路摄像头流 ID、WebRTC 地址和日志。
 - WebRTC 实时推流发布端，按 WHIP 协议把一路视频推到服务端。
 - Android 原生桥接，基于 `MethodChannel` 和 `EventChannel`。
 - 通过 Android USB Host API 枚举设备并请求权限。
@@ -19,7 +19,7 @@ USB 设备列表用于现场选择和权限流程；真正的视频采集由系�
 
 ## WebRTC 实时预览流程
 
-1. Flutter 端选择摄像头、WHIP 地址和流 ID。
+1. Flutter 端选择摄像头、WHIP 地址和默认流 ID 前缀；每个检测到的摄像头可单独修改流 ID。
 2. 点击开始后，应用通过 Android 标准摄像头接口获取本地视频轨。
 3. 应用创建 WebRTC offer，等待 ICE candidate 收集完成。
 4. 应用把 SDP offer 以 `application/sdp` POST 到 WHIP 地址。
@@ -49,7 +49,7 @@ android/app/src/main/kotlin/com/example/xiangji/service/CameraStreamService.kt
 
 ## WHIP endpoint
 
-服务端需要提供 WHIP 接入地址。应用发送：
+服务端需要提供 WHIP 接入地址。应用会把地址最后一段替换成启动摄像头自己的流 ID，并发送：
 
 ```http
 POST /whip/camera-001
@@ -85,6 +85,10 @@ python examples/whip_receiver.py --host 0.0.0.0 --port 8080
 ```text
 http://<接收端机器 IP>:8080/whip/camera-001
 ```
+
+如果检测到多路摄像头，默认流 ID 前缀为 `camera-001` 时，界面会自动生成
+`camera-001-01`、`camera-001-02` 这类每路 ID；也可以在摄像头卡片里手动改成
+任意不重复、无空白字符的 ID。当前实时 WebRTC 启动流程仍先推选中的第一路摄像头。
 
 如果是在同一台电脑的模拟环境测试，也可以填：
 
