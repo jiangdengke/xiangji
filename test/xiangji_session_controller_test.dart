@@ -71,6 +71,55 @@ void main() {
     controller.dispose();
   });
 
+  test('controller does not start when WHIP endpoint is not configured', () async {
+    final bridge = _TestBridge();
+    final livePublisher = _RecordingLivePublisher();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      livePublisher: livePublisher,
+    );
+
+    await controller.initialize();
+    expect(controller.hasSelectedVideoCamera, isTrue);
+    expect(controller.isEndpointValid, isFalse);
+    expect(controller.canStart, isFalse);
+
+    await controller.start();
+
+    expect(livePublisher.startConfigs, isEmpty);
+    expect(controller.phase, SessionPhase.ready);
+    expect(controller.lastError, isEmpty);
+    expect(
+      controller.latestLog?.message,
+      contains('请输入有效的 HTTP 或 HTTPS WebRTC 推流地址'),
+    );
+
+    controller.dispose();
+  });
+
+  test('controller keeps app state after live publisher start failure', () async {
+    final bridge = _TestBridge();
+    final livePublisher = _FailingLivePublisher();
+    final controller = XiangjiSessionController(
+      bridge: bridge,
+      uploader: _RecordingUploader(),
+      livePublisher: livePublisher,
+      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
+    );
+
+    await controller.initialize();
+    await controller.start();
+
+    expect(livePublisher.startRequests, 1);
+    expect(controller.phase, SessionPhase.error);
+    expect(controller.isLiveStreaming, isFalse);
+    expect(controller.lastError, contains('测试推流失败'));
+    expect(controller.latestLog?.message, contains('启动失败'));
+
+    controller.dispose();
+  });
+
   test('controller keeps stop available after a stale ready status', () async {
     final bridge = _TestBridge();
     final livePublisher = _RecordingLivePublisher();
@@ -133,6 +182,29 @@ class _RecordingLivePublisher implements LiveStreamPublisher {
       ),
     );
   }
+
+  @override
+  Future<void> dispose() async {
+    await _statuses.close();
+  }
+}
+
+class _FailingLivePublisher implements LiveStreamPublisher {
+  final StreamController<LivePublisherStatus> _statuses =
+      StreamController<LivePublisherStatus>.broadcast();
+  int startRequests = 0;
+
+  @override
+  Stream<LivePublisherStatus> get statuses => _statuses.stream;
+
+  @override
+  Future<void> start(LiveStreamConfig config) async {
+    startRequests += 1;
+    throw StateError('测试推流失败');
+  }
+
+  @override
+  Future<void> stop() async {}
 
   @override
   Future<void> dispose() async {

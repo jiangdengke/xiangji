@@ -233,17 +233,21 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
   Widget _configSection(BuildContext context) {
     return _Section(
       title: 'WebRTC 地址',
-      subtitle: controller.isEndpointValid
-          ? '机器人端会通过 WHIP 把一路 WebRTC 实时流推到服务端。'
-          : '开始前请输入有效的 HTTP 或 HTTPS 地址。',
+      subtitle: _configSubtitle(),
       child: Column(
         children: <Widget>[
           TextField(
             controller: _endpointController,
             onChanged: controller.updateEndpointText,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'WHIP 地址',
               hintText: 'http://server:8080/whip/camera-001',
+              helperText: 'Android 真机请填写接收端机器的局域网 IP，不要填 127.0.0.1。',
+              errorText:
+                  controller.endpointText.isNotEmpty &&
+                      !controller.isEndpointValid
+                  ? '请输入 HTTP 或 HTTPS 地址'
+                  : null,
               border: OutlineInputBorder(),
             ),
             keyboardType: TextInputType.url,
@@ -253,8 +257,10 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
           TextField(
             controller: _streamIdController,
             onChanged: controller.updateStreamIdText,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: '流 ID',
+              helperText: '建议和地址末尾保持一致，例如 camera-001。',
+              errorText: controller.isStreamIdValid ? null : '流 ID 不能包含空白字符',
               border: OutlineInputBorder(),
             ),
             textInputAction: TextInputAction.done,
@@ -262,6 +268,19 @@ class _StreamDashboardPageState extends State<StreamDashboardPage> {
         ],
       ),
     );
+  }
+
+  String _configSubtitle() {
+    if (controller.endpointText.isEmpty) {
+      return '开始前请填写 WHIP 接收端地址，例如 http://192.168.1.10:8080/whip/camera-001。';
+    }
+    if (!controller.isEndpointValid) {
+      return '地址无效，请使用 HTTP 或 HTTPS WHIP 地址。';
+    }
+    if (!controller.isStreamIdValid) {
+      return '流 ID 不能为空，也不能包含空白字符。';
+    }
+    return '机器人端会通过 WHIP 把一路 WebRTC 实时流推到服务端。';
   }
 
   Widget _devicesSection(BuildContext context) {

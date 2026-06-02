@@ -14,7 +14,7 @@ class XiangjiSessionController extends ChangeNotifier {
     required CameraBridge bridge,
     required SegmentUploader uploader,
     required LiveStreamPublisher livePublisher,
-    String endpointText = 'http://127.0.0.1:8080/whip/camera-001',
+    String endpointText = '',
     String streamIdText = 'camera-001',
     String fragmentDurationText = '2000',
   }) : _bridge = bridge,
@@ -115,13 +115,19 @@ class XiangjiSessionController extends ChangeNotifier {
         (uri.isScheme('http') || uri.isScheme('https'));
   }
 
+  bool get isStreamIdValid {
+    final value = _streamIdText.trim();
+    return value.isNotEmpty && !value.contains(RegExp(r'\s'));
+  }
+
   bool get canStart {
     return hasSelectedVideoCamera &&
         !_sessionActive &&
         phase != SessionPhase.starting &&
         phase != SessionPhase.streaming &&
         phase != SessionPhase.stopping &&
-        isEndpointValid;
+        isEndpointValid &&
+        isStreamIdValid;
   }
 
   bool get canStop {
@@ -269,7 +275,7 @@ class XiangjiSessionController extends ChangeNotifier {
   }
 
   void updateStreamIdText(String value) {
-    _streamIdText = value.trim().isEmpty ? 'camera-001' : value.trim();
+    _streamIdText = value.trim();
     notifyListeners();
   }
 
@@ -322,12 +328,33 @@ class XiangjiSessionController extends ChangeNotifier {
   }
 
   Future<void> start() async {
+    if (_disposed) {
+      return;
+    }
+
+    try {
+      await _startLive();
+    } catch (error, stackTrace) {
+      _handleStartFailure(error, stackTrace);
+    }
+  }
+
+  Future<void> _startLive() async {
     final selectedCameras = selectedVideoDevices;
     if (selectedCameras.isEmpty) {
       _appendLog(
         '开始前请先选择至少一个 USB 摄像头。',
         LogLevel.warning,
         topic: LogTopic.device,
+      );
+      return;
+    }
+
+    if (!isStreamIdValid) {
+      _appendLog(
+        '流 ID 不能为空，也不能包含空白字符。',
+        LogLevel.warning,
+        topic: LogTopic.session,
       );
       return;
     }
@@ -363,46 +390,31 @@ class XiangjiSessionController extends ChangeNotifier {
     _statusMessage = '正在从 ${camera.deviceName} 启动 WebRTC 实时推流。';
     notifyListeners();
 
-    try {
-      if (selectedCameras.length > 1) {
-        _appendLog(
-          '实时预览当前先推一路，使用 ${camera.deviceName}。',
-          LogLevel.info,
-          topic: LogTopic.session,
-        );
-      }
-      await _livePublisher.start(
-        LiveStreamConfig(
-          endpoint: endpoint,
-          streamId: streamId,
-          cameraName: camera.deviceName,
-        ),
-      );
-      _sessionActive = true;
-      _liveActive = true;
-      _lastLiveEventAt = DateTime.now();
-      _phase = SessionPhase.streaming;
-      _statusMessage = 'WebRTC 实时推流已启动，流 ID：$streamId。';
+    if (selectedCameras.length > 1) {
       _appendLog(
-        '已向 WHIP 服务端推送 WebRTC offer，流 ID：$streamId。',
+        '实时预览当前先推一路，使用 ${camera.deviceName}。',
         LogLevel.info,
         topic: LogTopic.session,
       );
-      notifyListeners();
-    } catch (error, stackTrace) {
-      _phase = SessionPhase.error;
-      _liveActive = false;
-      _sessionActive = false;
-      _statusMessage = '启动 WebRTC 实时推流失败。';
-      _lastError = error.toString();
-      _appendLog(
-        '启动失败：$error',
-        LogLevel.error,
-        topic: LogTopic.session,
-        details: stackTrace,
-      );
-      notifyListeners();
     }
+    await _livePublisher.start(
+      LiveStreamConfig(
+        endpoint: endpoint,
+        streamId: streamId,
+        cameraName: camera.deviceName,
+      ),
+    );
+    _sessionActive = true;
+    _liveActive = true;
+    _lastLiveEventAt = DateTime.now();
+    _phase = SessionPhase.streaming;
+    _statusMessage = 'WebRTC 实时推流已启动，流 ID：$streamId。';
+    _appendLog(
+      '已向 WHIP 服务端推送 WebRTC offer，流 ID：$streamId。',
+      LogLevel.info,
+      topic: LogTopic.session,
+    );
+    notifyListeners();
   }
 
   Future<void> stop() async {
@@ -435,6 +447,24 @@ class XiangjiSessionController extends ChangeNotifier {
 
   Future<void> retryPendingUploads() async {
     await _drainPendingSegments(force: true);
+  }
+
+  void reportUnhandledError(Object error, StackTrace? stackTrace) {
+    if (_disposed) {
+      return;
+    }
+
+    _phase = SessionPhase.error;
+    _sessionActive = false;
+    _liveActive = false;
+    _statusMessage = '应用捕获到未处理异常，已停止当前操作。';
+    _lastError = error.toString();
+    _appendLog(
+      '捕获到未处理异常：$error',
+      LogLevel.error,
+      topic: LogTopic.error,
+      details: stackTrace,
+    );
   }
 
   Future<void> _handleBridgeEvent(CameraBridgeEvent event) async {
@@ -779,6 +809,20 @@ class XiangjiSessionController extends ChangeNotifier {
       headers: const <String, String>{},
       timeout: const Duration(seconds: 30),
       deleteAfterUpload: true,
+    );
+  }
+
+  void _handleStartFailure(Object error, StackTrace stackTrace) {
+    _phase = SessionPhase.error;
+    _liveActive = false;
+    _sessionActive = false;
+    _statusMessage = '启动 WebRTC 实时推流失败。';
+    _lastError = error.toString();
+    _appendLog(
+      '启动失败：$error',
+      LogLevel.error,
+      topic: LogTopic.session,
+      details: stackTrace,
     );
   }
 
