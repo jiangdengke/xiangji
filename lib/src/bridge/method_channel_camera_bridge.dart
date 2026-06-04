@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../domain.dart';
 import 'camera_bridge.dart';
+import 'camera_bridge_event_mapper.dart';
 
 class MethodChannelCameraBridge implements CameraBridge {
   MethodChannelCameraBridge()
@@ -29,6 +30,7 @@ class MethodChannelCameraBridge implements CameraBridge {
   );
 
   final StreamController<CameraBridgeEvent> _eventController;
+  final CameraBridgeEventMapper _eventMapper = const CameraBridgeEventMapper();
   late final StreamSubscription<dynamic> _eventSubscription;
 
   @override
@@ -81,118 +83,10 @@ class MethodChannelCameraBridge implements CameraBridge {
     }
   }
 
-  @override
-  Future<void> startSession(CameraSessionRequest request) async {
-    try {
-      await _methodChannel.invokeMethod<void>('startSession', request.toMap());
-    } on MissingPluginException {
-      return;
-    }
-  }
-
-  @override
-  Future<void> stopSession() async {
-    try {
-      await _methodChannel.invokeMethod<void>('stopSession');
-    } on MissingPluginException {
-      return;
-    }
-  }
-
   void _handleEvent(dynamic raw) {
-    if (raw is! Map) {
-      return;
-    }
-
-    final map = Map<Object?, Object?>.from(raw);
-    final type = map['type']?.toString();
-
-    switch (type) {
-      case 'devices':
-        final devices = (map['devices'] as List? ?? const <Object?>[])
-            .whereType<Map<Object?, Object?>>()
-            .map(UsbCameraDevice.fromMap)
-            .toList(growable: false);
-        _eventController.add(CameraDevicesUpdated(devices));
-        break;
-      case 'status':
-        _eventController.add(
-          CameraStatusEvent(
-            phase: _parsePhase(map['phase']?.toString()),
-            message: map['message']?.toString() ?? '',
-          ),
-        );
-        break;
-      case 'segment':
-        final segmentMap = map['segment'];
-        if (segmentMap is Map<Object?, Object?>) {
-          _eventController.add(
-            CameraSegmentReadyEvent(CameraSegment.fromMap(segmentMap)),
-          );
-        }
-        break;
-      case 'permission':
-        _eventController.add(
-          CameraPermissionEvent(
-            deviceId: map['deviceId']?.toString() ?? '',
-            granted: map['granted']?.toString() == 'true',
-          ),
-        );
-        break;
-      case 'log':
-        _eventController.add(
-          CameraLogEvent(
-            level: _parseLevel(map['level']?.toString()),
-            message: map['message']?.toString() ?? '',
-          ),
-        );
-        break;
-      case 'error':
-        _eventController.add(
-          CameraErrorEvent(
-            message: map['message']?.toString() ?? 'Unknown native error.',
-            details: map['details'],
-          ),
-        );
-        break;
-      default:
-        break;
-    }
-  }
-
-  SessionPhase _parsePhase(String? value) {
-    switch (value) {
-      case 'discovering':
-        return SessionPhase.discovering;
-      case 'ready':
-        return SessionPhase.ready;
-      case 'permissionRequested':
-        return SessionPhase.permissionRequested;
-      case 'starting':
-        return SessionPhase.starting;
-      case 'streaming':
-        return SessionPhase.streaming;
-      case 'stopping':
-        return SessionPhase.stopping;
-      case 'error':
-        return SessionPhase.error;
-      case 'idle':
-      default:
-        return SessionPhase.idle;
-    }
-  }
-
-  LogLevel _parseLevel(String? value) {
-    switch (value) {
-      case 'debug':
-        return LogLevel.debug;
-      case 'warning':
-        return LogLevel.warning;
-      case 'error':
-        return LogLevel.error;
-      case 'info':
-      default:
-        return LogLevel.info;
+    final event = _eventMapper.map(raw);
+    if (event != null) {
+      _eventController.add(event);
     }
   }
 

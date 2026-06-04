@@ -1,2 +1,5 @@
+# aiohttp 提供 HTTP 服务和路由，用来接收 WHIP 的 POST/DELETE 请求。
 aiohttp>=3.9
+
+# aiortc 提供 WebRTC PeerConnection、SDP 协商和媒体 track 接收能力。
 aiortc>=1.8

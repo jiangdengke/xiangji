@@ -1,10 +1,19 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 
+import 'whip_ice_gathering.dart';
+import 'whip_peer_connection_monitor.dart';
+import 'whip_publisher_status_controller.dart';
 import 'live_stream_publisher.dart';
+import 'whip_signaling_client.dart';
+import 'whip_web_rtc_session.dart';
+import 'whip_web_rtc_session_registry.dart';
+import 'whip_web_rtc_session_starter.dart';
+import 'whip_web_rtc_session_stopper.dart';
+import 'whip_web_rtc_publisher_messages.dart';
+
+export 'whip_signaling_client.dart' show WhipSignalingException;
 
 class WhipWebRtcPublisher implements LiveStreamPublisher {
   WhipWebRtcPublisher({
@@ -13,319 +22,114 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
     this.preflightTimeout = const Duration(seconds: 3),
     this.iceGatheringTimeout = const Duration(seconds: 5),
     Future<void> Function(Uri endpoint, Duration timeout)? endpointProbe,
-  }) : _client = client ?? http.Client(),
-       _endpointProbe = endpointProbe ?? _probeEndpoint;
+  }) {
+    _signalingClient = WhipSignalingClient(
+      client: client,
+      signalingTimeout: signalingTimeout,
+      preflightTimeout: preflightTimeout,
+      endpointProbe: endpointProbe,
+    );
+    _sessionStarter = WhipWebRtcSessionStarter(
+      signalingClient: _signalingClient,
+      iceGatheringWaiter: WhipIceGatheringWaiter(
+        timeout: iceGatheringTimeout,
+        statusSink: _statusController.sink,
+      ),
+      peerConnectionMonitor: WhipPeerConnectionMonitor(
+        statusSink: _statusController.sink,
+      ),
+      statusSink: _statusController.sink,
+    );
+    _sessionStopper = WhipWebRtcSessionStopper(
+      signalingClient: _signalingClient,
+      statusSink: _statusController.sink,
+    );
+  }
 
-  final http.Client _client;
-  final Future<void> Function(Uri endpoint, Duration timeout) _endpointProbe;
   final Duration signalingTimeout;
   final Duration preflightTimeout;
   final Duration iceGatheringTimeout;
-  final StreamController<LivePublisherStatus> _statuses =
-      StreamController<LivePublisherStatus>.broadcast();
-
-  RTCPeerConnection? _peerConnection;
-  MediaStream? _localStream;
-  Uri? _resourceUri;
-  String? _bearerToken;
-  bool _closing = false;
+  late final WhipSignalingClient _signalingClient;
+  late final WhipWebRtcSessionStarter _sessionStarter;
+  late final WhipWebRtcSessionStopper _sessionStopper;
+  final WhipPublisherStatusController _statusController =
+      WhipPublisherStatusController();
+  final WhipWebRtcSessionRegistry _sessions = WhipWebRtcSessionRegistry();
   bool _disposed = false;
 
   @override
-  Stream<LivePublisherStatus> get statuses => _statuses.stream;
+  Stream<LivePublisherStatus> get statuses => _statusController.stream;
 
   @override
   Future<void> start(LiveStreamConfig config) async {
     if (_disposed) {
       throw StateError('WebRTC publisher has been disposed.');
     }
-    if (_peerConnection != null || _localStream != null) {
-      await stop();
+    final existingSession = _sessions.byStreamId(config.streamId);
+    if (existingSession != null) {
+      await _stopTrackedSession(existingSession, emitStopped: false);
     }
 
-    _closing = false;
-    _bearerToken = config.bearerToken;
-    _emit(
+    _statusController.emit(
       LivePublisherPhase.connecting,
-      config.cameraName.isEmpty
-          ? '正在启动 WebRTC 实时推流。'
-          : '正在从 ${config.cameraName} 启动 WebRTC 实时推流。',
+      whipPublisherConnectingMessage(config),
     );
 
     try {
-      await _preflightEndpoint(config);
-      final stream = await navigator.mediaDevices.getUserMedia(
-        _mediaConstraints(config),
+      final session = await _sessionStarter.start(
+        config,
+        onSessionCreated: (WhipWebRtcSession session) {
+          _sessions.track(session);
+        },
       );
-      _localStream = stream;
-
-      final peerConnection = await createPeerConnection(_peerConfiguration());
-      _peerConnection = peerConnection;
-      _bindPeerConnectionEvents(peerConnection);
-
-      for (final track in stream.getTracks()) {
-        await peerConnection.addTrack(track, stream);
-      }
-
-      final offer = await peerConnection.createOffer(_offerConstraints());
-      await peerConnection.setLocalDescription(offer);
-      await _waitForIceGatheringComplete(peerConnection);
-
-      final localDescription =
-          await peerConnection.getLocalDescription() ?? offer;
-      final response = await _postOffer(
-        config: config,
-        sdp: localDescription.sdp ?? '',
-      );
-      final answerSdp = response.body.trim();
-      if (answerSdp.isEmpty) {
-        throw const WhipSignalingException('WHIP 服务端没有返回 SDP answer。');
-      }
-
-      _resourceUri = _resolveLocation(
-        config.endpoint,
-        response.headers['location'],
-      );
-      await peerConnection.setRemoteDescription(
-        RTCSessionDescription(answerSdp, 'answer'),
-      );
-      _emit(
+      _sessions.track(session);
+      _statusController.emit(
         LivePublisherPhase.streaming,
-        _resourceUri == null
-            ? 'WebRTC 实时推流已建立。'
-            : 'WebRTC 实时推流已建立，停止时会释放 WHIP 会话。',
+        whipPublisherStreamingMessage(
+          config: config,
+          resourceUri: session.resourceUri,
+        ),
       );
     } catch (error, stackTrace) {
-      try {
-        await _cleanup();
-      } catch (cleanupError) {
-        _emit(LivePublisherPhase.error, 'WebRTC 推流清理失败。', cleanupError);
-      }
-      _emit(LivePublisherPhase.error, 'WebRTC 实时推流启动失败。', error);
+      _sessions.remove(config.streamId);
+      _statusController.emit(
+        LivePublisherPhase.error,
+        whipPublisherStartFailedMessage(config),
+        error,
+      );
       Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
   @override
   Future<void> stop() async {
-    if (_peerConnection == null && _localStream == null && _resourceUri == null) {
+    if (_sessions.isEmpty) {
       return;
     }
 
-    _closing = true;
-    _emit(LivePublisherPhase.stopping, '正在停止 WebRTC 实时推流。');
-    final resourceUri = _resourceUri;
-    try {
-      if (resourceUri != null) {
-        await _client
-            .delete(resourceUri, headers: _signalingHeaders())
-            .timeout(signalingTimeout);
-      }
-    } catch (error) {
-      _emit(LivePublisherPhase.stopping, '释放 WHIP 会话失败，继续关闭本地推流。', error);
-    } finally {
-      await _cleanup();
-      _emit(LivePublisherPhase.stopped, 'WebRTC 实时推流已停止。');
-      _closing = false;
+    final sessions = _sessions.sessions;
+    _statusController.emit(
+      LivePublisherPhase.stopping,
+      whipPublisherStoppingMessage(sessions.length),
+    );
+    for (final session in sessions) {
+      await _stopTrackedSession(session, emitStopped: false);
     }
+    _statusController.emit(
+      LivePublisherPhase.stopped,
+      whipPublisherStoppedMessage(),
+    );
   }
 
-  Map<String, dynamic> _mediaConstraints(LiveStreamConfig config) {
-    return <String, dynamic>{
-      'audio': config.audioEnabled,
-      'video': <String, dynamic>{
-        'facingMode': 'environment',
-        'width': <String, dynamic>{'ideal': config.width},
-        'height': <String, dynamic>{'ideal': config.height},
-        'frameRate': <String, dynamic>{'ideal': config.frameRate},
-      },
-    };
-  }
-
-  Map<String, dynamic> _peerConfiguration() {
-    return <String, dynamic>{
-      'sdpSemantics': 'unified-plan',
-      'iceServers': <Map<String, dynamic>>[
-        <String, dynamic>{
-          'urls': <String>['stun:stun.l.google.com:19302'],
-        },
-      ],
-    };
-  }
-
-  Map<String, dynamic> _offerConstraints() {
-    return <String, dynamic>{
-      'mandatory': <String, dynamic>{
-        'OfferToReceiveAudio': false,
-        'OfferToReceiveVideo': false,
-      },
-      'optional': <dynamic>[],
-    };
-  }
-
-  void _bindPeerConnectionEvents(RTCPeerConnection peerConnection) {
-    peerConnection.onConnectionState = (RTCPeerConnectionState state) {
-      if (_closing) {
-        return;
-      }
-      switch (state) {
-        case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
-          _emit(LivePublisherPhase.streaming, 'WebRTC 连接已连通。');
-          break;
-        case RTCPeerConnectionState.RTCPeerConnectionStateFailed:
-          _emit(LivePublisherPhase.error, 'WebRTC 连接失败。');
-          break;
-        case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
-          _emit(LivePublisherPhase.error, 'WebRTC 连接已断开。');
-          break;
-        case RTCPeerConnectionState.RTCPeerConnectionStateClosed:
-        case RTCPeerConnectionState.RTCPeerConnectionStateNew:
-        case RTCPeerConnectionState.RTCPeerConnectionStateConnecting:
-          break;
-      }
-    };
-  }
-
-  Future<void> _waitForIceGatheringComplete(
-    RTCPeerConnection peerConnection,
-  ) async {
-    final current = await peerConnection.getIceGatheringState();
-    if (current == RTCIceGatheringState.RTCIceGatheringStateComplete) {
-      return;
-    }
-
-    final completer = Completer<void>();
-    final previous = peerConnection.onIceGatheringState;
-    peerConnection.onIceGatheringState = (RTCIceGatheringState state) {
-      previous?.call(state);
-      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete &&
-          !completer.isCompleted) {
-        completer.complete();
-      }
-    };
-
-    try {
-      await completer.future.timeout(iceGatheringTimeout);
-    } on TimeoutException catch (error) {
-      _emit(LivePublisherPhase.connecting, 'ICE 候选收集超时，继续尝试 WHIP 推流。', error);
-    } finally {
-      peerConnection.onIceGatheringState = previous;
-    }
-  }
-
-  Future<http.Response> _postOffer({
-    required LiveStreamConfig config,
-    required String sdp,
+  Future<void> _stopTrackedSession(
+    WhipWebRtcSession session, {
+    required bool emitStopped,
   }) async {
-    final http.Response response;
-    try {
-      response = await _client
-          .post(
-            config.endpoint,
-            headers: <String, String>{
-              ..._signalingHeaders(),
-              'Accept': 'application/sdp',
-              'Content-Type': 'application/sdp',
-              'X-Stream-Id': config.streamId,
-            },
-            body: sdp,
-          )
-          .timeout(signalingTimeout);
-    } on TimeoutException catch (error) {
-      throw WhipSignalingException('连接 WHIP 地址超时，请检查 IP、端口和网络。', error);
-    } on http.ClientException catch (error) {
-      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error.message);
-    } catch (error) {
-      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error);
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw WhipSignalingException(
-        'WHIP 服务端返回 HTTP ${response.statusCode}。',
-        response.body,
-      );
-    }
-    return response;
-  }
-
-  Future<void> _preflightEndpoint(LiveStreamConfig config) async {
-    try {
-      await _endpointProbe(config.endpoint, preflightTimeout);
-    } on TimeoutException catch (error) {
-      throw WhipSignalingException('连接 WHIP 地址超时，请检查 IP、端口和网络。', error);
-    } on SocketException catch (error) {
-      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error.message);
-    } on WhipSignalingException {
-      rethrow;
-    } catch (error) {
-      throw WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。', error);
-    }
-  }
-
-  static Future<void> _probeEndpoint(Uri endpoint, Duration timeout) async {
-    final socket = await Socket.connect(
-      endpoint.host,
-      _endpointPort(endpoint),
-      timeout: timeout,
-    );
-    socket.destroy();
-  }
-
-  static int _endpointPort(Uri endpoint) {
-    if (endpoint.hasPort) {
-      return endpoint.port;
-    }
-    return endpoint.isScheme('https') ? 443 : 80;
-  }
-
-  Map<String, String> _signalingHeaders() {
-    final token = _bearerToken;
-    if (token == null || token.trim().isEmpty) {
-      return const <String, String>{};
-    }
-    return <String, String>{'Authorization': 'Bearer ${token.trim()}'};
-  }
-
-  Uri? _resolveLocation(Uri endpoint, String? location) {
-    if (location == null || location.trim().isEmpty) {
-      return null;
-    }
-    final parsed = Uri.tryParse(location.trim());
-    if (parsed == null) {
-      return null;
-    }
-    if (parsed.hasScheme) {
-      return parsed;
-    }
-    return endpoint.resolveUri(parsed);
-  }
-
-  Future<void> _cleanup() async {
-    final stream = _localStream;
-    final peerConnection = _peerConnection;
-    _localStream = null;
-    _peerConnection = null;
-    _resourceUri = null;
-
-    if (stream != null) {
-      for (final track in stream.getTracks()) {
-        await track.stop();
-      }
-      await stream.dispose();
-    }
-    if (peerConnection != null) {
-      await peerConnection.close();
-      await peerConnection.dispose();
-    }
-  }
-
-  void _emit(LivePublisherPhase phase, String message, [Object? details]) {
-    if (_disposed || _statuses.isClosed) {
+    if (_sessions.remove(session.config.streamId) == null) {
       return;
     }
-    _statuses.add(
-      LivePublisherStatus(phase: phase, message: message, details: details),
-    );
+
+    await _sessionStopper.stop(session, emitStopped: emitStopped);
   }
 
   @override
@@ -334,23 +138,11 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
       return;
     }
     _disposed = true;
-    await _cleanup();
-    _client.close();
-    await _statuses.close();
-  }
-}
-
-class WhipSignalingException implements Exception {
-  const WhipSignalingException(this.message, [this.details]);
-
-  final String message;
-  final Object? details;
-
-  @override
-  String toString() {
-    if (details == null || details.toString().isEmpty) {
-      return message;
+    final sessions = _sessions.drain();
+    for (final session in sessions) {
+      await session.disposeLocalResources();
     }
-    return '$message $details';
+    _signalingClient.close();
+    await _statusController.close();
   }
 }

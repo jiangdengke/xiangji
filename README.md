@@ -5,12 +5,11 @@
 ## 已实现
 
 - Flutter 控制台，包含状态、摄像头选择、每路摄像头流 ID、WebRTC 地址和日志。
-- WebRTC 实时推流发布端，按 WHIP 协议把一路视频推到服务端。
+- WebRTC 实时推流发布端，按 WHIP 协议把一路或多路视频推到服务端。
 - Android 原生桥接，基于 `MethodChannel` 和 `EventChannel`。
 - 通过 Android USB Host API 枚举设备并请求权限。
 - USB 热插拔检测，能区分普通 USB 设备和真正的视频摄像头。
 - 非 Android 开发和测试用的模拟桥接。
-- 旧的 Camera2 MP4 分片录制和 HTTP 上传代码保留在仓库里，但当前启动流程不再调用。
 
 当前实时预览通过 `flutter_webrtc` 调 Android 标准摄像头接口获取画面。应用的
 USB 设备列表用于现场选择和权限流程；真正的视频采集由系统 WebRTC 摄像头能力
@@ -36,15 +35,10 @@ lib/src/controller/xiangji_session_controller.dart
                                              Session state, USB flow, live stream control
 lib/src/bridge/*                             Flutter bridge abstractions
 lib/src/live/*                               WHIP/WebRTC publisher
-lib/src/upload/*                             HTTP segment uploader
 lib/src/ui/stream_dashboard_page.dart        Operational UI
 
 android/app/src/main/kotlin/com/example/xiangji/bridge/*
                                              Native USB channel and event bus
-android/app/src/main/kotlin/com/example/xiangji/camera/Camera2SegmentRecorder.kt
-                                             Camera2 encoder and MP4 segmenter
-android/app/src/main/kotlin/com/example/xiangji/service/CameraStreamService.kt
-                                             Foreground service lifecycle
 ```
 
 ## WHIP endpoint
@@ -88,16 +82,14 @@ http://<接收端机器 IP>:8080/whip/camera-001
 
 如果检测到多路摄像头，默认流 ID 前缀为 `camera-001` 时，界面会自动生成
 `camera-001-01`、`camera-001-02` 这类每路 ID；也可以在摄像头卡片里手动改成
-任意不重复、无空白字符的 ID。当前实时 WebRTC 启动流程仍先推选中的第一路摄像头。
+任意不重复、无空白字符的 ID。当前实时 WebRTC 启动流程会为选中的每路摄像头
+分别创建一路 WHIP 会话。
 
 如果是在同一台电脑的模拟环境测试，也可以填：
 
 ```text
 http://127.0.0.1:8080/whip/camera-001
 ```
-
-旧的 MP4 分片上传代码是普通 HTTP `POST video/mp4` 接收，不是当前默认启动流程；
-当前实时链路请优先使用这个 WHIP 接收示例。
 
 ## Verify
 

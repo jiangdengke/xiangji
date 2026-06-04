@@ -47,20 +47,9 @@ class MainActivity : FlutterActivity() {
                     } else {
                         CameraBridgeEventBus.error(
                             message = "Android 相机权限被拒绝。",
-                            details = "授予该权限后才能开始录制。",
+                            details = "授予该权限后才能开始推流。",
                         )
                     }
-                }
-
-                Manifest.permission.POST_NOTIFICATIONS -> {
-                    CameraBridgeEventBus.log(
-                        if (granted) "info" else "warning",
-                        if (granted) {
-                            "已授予 Android 通知权限。"
-                        } else {
-                            "Android 通知权限被拒绝，前台服务通知可能不可见。"
-                        },
-                    )
                 }
             }
         }
@@ -74,12 +63,6 @@ class MainActivity : FlutterActivity() {
         val permissions = mutableListOf<String>()
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             permissions.add(Manifest.permission.CAMERA)
-        }
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
         if (permissions.isNotEmpty()) {

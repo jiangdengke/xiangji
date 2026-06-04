@@ -6,9 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xiangji/src/app.dart';
 import 'package:xiangji/src/bridge/mock_camera_bridge.dart';
 import 'package:xiangji/src/controller/xiangji_session_controller.dart';
-import 'package:xiangji/src/domain.dart';
 import 'package:xiangji/src/live/live_stream_publisher.dart';
-import 'package:xiangji/src/upload/segment_uploader.dart';
 
 void main() {
   testWidgets('dashboard renders the main controls', (
@@ -16,7 +14,6 @@ void main() {
   ) async {
     final controller = XiangjiSessionController(
       bridge: MockCameraBridge(),
-      uploader: _NoopUploader(),
       livePublisher: _NoopLivePublisher(),
     );
     await controller.initialize();
@@ -60,24 +57,6 @@ void main() {
     expect(find.text('模拟 UVC 摄像头 2'), findsOneWidget);
     expect(find.text('该摄像头流 ID'), findsWidgets);
   });
-}
-
-class _NoopUploader implements SegmentUploader {
-  @override
-  Future<UploadReceipt> uploadSegment({
-    required CameraSegment segment,
-    required UploadTarget target,
-  }) async {
-    return UploadReceipt(
-      endpoint: target.endpoint,
-      statusCode: 200,
-      bytesSent: segment.byteLength,
-      responseBody: 'ok',
-    );
-  }
-
-  @override
-  Future<void> dispose() async {}
 }
 
 class _NoopLivePublisher implements LiveStreamPublisher {

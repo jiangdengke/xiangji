@@ -6,6 +6,7 @@ class LiveStreamConfig {
   const LiveStreamConfig({
     required this.endpoint,
     required this.streamId,
+    this.deviceId = '',
     this.cameraName = '',
     this.audioEnabled = false,
     this.width = 1280,
@@ -16,6 +17,7 @@ class LiveStreamConfig {
 
   final Uri endpoint;
   final String streamId;
+  final String deviceId;
   final String cameraName;
   final bool audioEnabled;
   final int width;

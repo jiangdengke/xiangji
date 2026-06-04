@@ -9,10 +9,6 @@ abstract class CameraBridge {
 
   Future<bool> requestPermission(String deviceId);
 
-  Future<void> startSession(CameraSessionRequest request);
-
-  Future<void> stopSession();
-
   Future<void> dispose();
 }
 
@@ -31,12 +27,6 @@ final class CameraStatusEvent extends CameraBridgeEvent {
 
   final SessionPhase phase;
   final String message;
-}
-
-final class CameraSegmentReadyEvent extends CameraBridgeEvent {
-  const CameraSegmentReadyEvent(this.segment);
-
-  final CameraSegment segment;
 }
 
 final class CameraPermissionEvent extends CameraBridgeEvent {

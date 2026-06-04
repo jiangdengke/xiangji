@@ -69,15 +69,6 @@ object CameraBridgeEventBus {
         )
     }
 
-    fun segment(segment: Map<String, Any?>) {
-        emit(
-            mapOf(
-                "type" to "segment",
-                "segment" to segment,
-            ),
-        )
-    }
-
     private fun emit(event: Map<String, Any?>) {
         mainHandler.post {
             sink?.success(event)
