@@ -27,13 +27,13 @@ class WhipWebRtcSession {
 Map<String, dynamic> buildWhipMediaConstraints(LiveStreamConfig config) {
   final videoConstraints = <String, dynamic>{
     'facingMode': 'environment',
-    'width': <String, dynamic>{'ideal': config.width},
-    'height': <String, dynamic>{'ideal': config.height},
-    'frameRate': <String, dynamic>{'ideal': config.frameRate},
+    'width': config.width,
+    'height': config.height,
+    'frameRate': config.frameRate,
   };
   final deviceId = _webrtcDeviceId(config.deviceId);
   if (deviceId.isNotEmpty) {
-    videoConstraints['deviceId'] = <String, dynamic>{'exact': deviceId};
+    videoConstraints['deviceId'] = deviceId;
   }
   return <String, dynamic>{
     'audio': config.audioEnabled,

@@ -79,7 +79,7 @@ class WhipWebRtcSessionStarter {
       );
       session.resourceUri = offerResult.resourceUri;
       await peerConnection.setRemoteDescription(
-        RTCSessionDescription(offerResult.answerSdp, 'answer'),
+        RTCSessionDescription(offerResult.answerSdp, offerResult.answerType),
       );
       return session;
     } catch (error, stackTrace) {
@@ -93,11 +93,7 @@ class WhipWebRtcSessionStarter {
           );
         }
       } catch (cleanupError) {
-        _statusSink(
-          LivePublisherPhase.error,
-          'WebRTC 推流清理失败。',
-          cleanupError,
-        );
+        _statusSink(LivePublisherPhase.error, 'WebRTC 推流清理失败。', cleanupError);
       }
       Error.throwWithStackTrace(error, stackTrace);
     }
