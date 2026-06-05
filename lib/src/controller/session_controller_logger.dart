@@ -17,13 +17,7 @@ class SessionControllerLogger {
     bool notify,
     LogTopic topic,
   ) {
-    appendLog(
-      message,
-      level,
-      topic: topic,
-      details: details,
-      notify: notify,
-    );
+    appendLog(message, level, topic: topic, details: details, notify: notify);
   }
 
   void appendLog(

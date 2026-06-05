@@ -12,7 +12,7 @@ void main() {
       messages.liveStarting(
         LiveStreamStartPreparation.ready(
           selectedCameras: <UsbCameraDevice>[_camera('camera-1', 'Camera 1')],
-          baseEndpoint: Uri.parse('http://127.0.0.1/whip/camera-001'),
+          baseEndpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
         ),
       ),
       '正在从 Camera 1 启动 WebRTC 实时推流。',
@@ -25,7 +25,7 @@ void main() {
             _camera('camera-1', 'Camera 1'),
             _camera('camera-2', 'Camera 2'),
           ],
-          baseEndpoint: Uri.parse('http://127.0.0.1/whip/camera-001'),
+          baseEndpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
         ),
       ),
       '正在启动 2 路 WebRTC 实时推流。',
@@ -36,24 +36,22 @@ void main() {
     expect(
       messages.liveStarted(
         LiveStreamStartResult(
-          streams: <LiveStreamStartedStream>[
-            _stream('camera-001-01'),
-          ],
+          streams: <LiveStreamStartedStream>[_stream('camera1')],
         ),
       ),
-      'WebRTC 实时推流已启动，流 ID：camera-001-01。',
+      'WebRTC 实时推流已启动，流 ID：camera1。',
     );
 
     expect(
       messages.liveStarted(
         LiveStreamStartResult(
           streams: <LiveStreamStartedStream>[
-            _stream('camera-001-01'),
-            _stream('camera-001-02'),
+            _stream('camera1'),
+            _stream('camera2'),
           ],
         ),
       ),
-      '已启动 2 路 WebRTC 实时推流：camera-001-01, camera-001-02。',
+      '已启动 2 路 WebRTC 实时推流：camera1, camera2。',
     );
   });
 }
@@ -63,7 +61,7 @@ LiveStreamStartedStream _stream(String streamId) {
   return LiveStreamStartedStream(
     camera: camera,
     streamId: streamId,
-    endpoint: Uri.parse('http://127.0.0.1/whip/$streamId'),
+    endpoint: Uri.parse('http://127.0.0.1:9090/offer/$streamId'),
   );
 }
 

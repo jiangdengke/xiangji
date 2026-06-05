@@ -52,10 +52,7 @@ void main() {
       _step(steps, StreamDashboardFlowStepKind.permission).state,
       StreamDashboardFlowState.done,
     );
-    expect(
-      _step(steps, StreamDashboardFlowStepKind.video).value,
-      '1 路待启动',
-    );
+    expect(_step(steps, StreamDashboardFlowStepKind.video).value, '1 路待启动');
     expect(
       _step(steps, StreamDashboardFlowStepKind.live).state,
       StreamDashboardFlowState.idle,

@@ -36,10 +36,7 @@ class SessionControlGuard {
         readiness.hasUniqueSelectedStreamIds;
   }
 
-  bool canStop({
-    required bool sessionActive,
-    required SessionPhase phase,
-  }) {
+  bool canStop({required bool sessionActive, required SessionPhase phase}) {
     return sessionActive ||
         phase == SessionPhase.streaming ||
         phase == SessionPhase.starting;
@@ -51,7 +48,9 @@ class SessionControlGuard {
     required SessionPhase phase,
     required Iterable<UsbCameraDevice> selectedCameras,
   }) {
-    if (!pendingStartAfterPermission || disposed || isActiveSessionPhase(phase)) {
+    if (!pendingStartAfterPermission ||
+        disposed ||
+        isActiveSessionPhase(phase)) {
       return false;
     }
     final cameras = selectedCameras.toList(growable: false);

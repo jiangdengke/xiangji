@@ -1,6 +1,13 @@
 import 'dart:async';
 
-enum LivePublisherPhase { idle, connecting, streaming, stopping, stopped, error }
+enum LivePublisherPhase {
+  idle,
+  connecting,
+  streaming,
+  stopping,
+  stopped,
+  error,
+}
 
 class LiveStreamConfig {
   const LiveStreamConfig({

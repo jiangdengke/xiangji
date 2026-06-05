@@ -52,8 +52,8 @@ class _StreamDashboardConfigSectionState
             controller: _endpointController,
             onChanged: controller.updateEndpointText,
             decoration: InputDecoration(
-              labelText: 'WHIP 地址',
-              hintText: 'http://server:8080/whip/camera-001',
+              labelText: '接收端地址',
+              hintText: 'http://server:9090/offer/camera1',
               helperText: 'Android 真机请填写接收端机器的局域网 IP，不要填 127.0.0.1。',
               errorText:
                   controller.endpointText.isNotEmpty &&
@@ -70,11 +70,12 @@ class _StreamDashboardConfigSectionState
             controller: _streamIdController,
             onChanged: controller.updateStreamIdText,
             decoration: InputDecoration(
-              labelText: '默认流 ID 前缀',
-              helperText: '检测到多路摄像头时会生成 camera-001-01、camera-001-02，可在设备卡片里单独修改。',
+              labelText: '默认 camera_name 前缀',
+              helperText:
+                  '默认生成 camera1、camera2、camera3、camera4，对应接收端 /offer/cameraX。',
               errorText: controller.isStreamIdValid
                   ? null
-                  : '默认流 ID 前缀不能为空，也不能包含空白字符',
+                  : '默认 camera_name 前缀不能为空，也不能包含空白字符',
               border: const OutlineInputBorder(),
             ),
             textInputAction: TextInputAction.done,
@@ -86,13 +87,13 @@ class _StreamDashboardConfigSectionState
 
   String _configSubtitle() {
     if (controller.endpointText.isEmpty) {
-      return '开始前请填写 WHIP 接收端地址，例如 http://192.168.1.10:8080/whip/camera-001。';
+      return '开始前请填写 ROS2 WebRTC 接收端地址，例如 http://192.168.1.10:9090/offer/camera1。';
     }
     if (!controller.isEndpointValid) {
-      return '地址无效，请使用 HTTP 或 HTTPS WHIP 地址。';
+      return '地址无效，请使用 HTTP 或 HTTPS 接收端地址。';
     }
     if (!controller.isStreamIdValid) {
-      return '默认流 ID 前缀不能为空，也不能包含空白字符。';
+      return '默认 camera_name 前缀不能为空，也不能包含空白字符。';
     }
     if (!controller.hasValidSelectedStreamIds) {
       return '选中摄像头里有无效流 ID，请在设备卡片里修正。';

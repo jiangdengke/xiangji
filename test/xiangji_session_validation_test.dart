@@ -12,12 +12,12 @@ void main() {
     final controller = XiangjiSessionController(
       bridge: bridge,
       livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-      streamIdText: 'camera-001',
+      endpointText: 'http://127.0.0.1:9090/offer/camera1',
+      streamIdText: 'camera',
     );
 
     await controller.initialize();
-    controller.updateDeviceStreamIdText('usb-2', 'camera-001-01');
+    controller.updateDeviceStreamIdText('usb-2', 'camera1');
 
     expect(controller.hasValidSelectedStreamIds, isTrue);
     expect(controller.hasUniqueSelectedStreamIds, isFalse);
@@ -28,10 +28,7 @@ void main() {
     await controller.start();
 
     expect(livePublisher.startConfigs, isEmpty);
-    expect(
-      controller.latestLog?.message,
-      contains('选中摄像头的流 ID 不能重复'),
-    );
+    expect(controller.latestLog?.message, contains('选中摄像头的流 ID 不能重复'));
 
     controller.dispose();
   });
@@ -65,33 +62,36 @@ void main() {
     controller.dispose();
   });
 
-  test('controller does not start when WHIP endpoint is not configured', () async {
-    final bridge = TestBridge();
-    final livePublisher = RecordingLivePublisher();
-    final controller = XiangjiSessionController(
-      bridge: bridge,
-      livePublisher: livePublisher,
-    );
+  test(
+    'controller does not start when receiver endpoint is not configured',
+    () async {
+      final bridge = TestBridge();
+      final livePublisher = RecordingLivePublisher();
+      final controller = XiangjiSessionController(
+        bridge: bridge,
+        livePublisher: livePublisher,
+      );
 
-    await controller.initialize();
-    expect(controller.hasSelectedVideoCamera, isTrue);
-    expect(controller.isEndpointValid, isFalse);
-    expect(controller.canStart, isFalse);
+      await controller.initialize();
+      expect(controller.hasSelectedVideoCamera, isTrue);
+      expect(controller.isEndpointValid, isFalse);
+      expect(controller.canStart, isFalse);
 
-    await controller.start();
+      await controller.start();
 
-    expect(livePublisher.startConfigs, isEmpty);
-    expect(controller.phase, SessionPhase.ready);
-    expect(controller.lastError, isEmpty);
-    expect(
-      controller.latestLog?.message,
-      contains('请输入有效的 HTTP 或 HTTPS WebRTC 推流地址'),
-    );
+      expect(livePublisher.startConfigs, isEmpty);
+      expect(controller.phase, SessionPhase.ready);
+      expect(controller.lastError, isEmpty);
+      expect(
+        controller.latestLog?.message,
+        contains('请输入有效的 HTTP 或 HTTPS WebRTC 推流地址'),
+      );
 
-    controller.dispose();
-  });
+      controller.dispose();
+    },
+  );
 
-  test('controller rejects WHIP endpoint without a host', () async {
+  test('controller rejects receiver endpoint without a host', () async {
     final bridge = TestBridge();
     final livePublisher = RecordingLivePublisher();
     final controller = XiangjiSessionController(
@@ -122,7 +122,7 @@ void main() {
     final controller = XiangjiSessionController(
       bridge: bridge,
       livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
+      endpointText: 'http://127.0.0.1:9090/offer/camera1',
     );
 
     await controller.initialize();

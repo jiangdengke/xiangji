@@ -1,7 +1,9 @@
 import '../domain.dart';
 import 'stream_dashboard_flow_types.dart';
 
-StreamDashboardFlowStep buildLiveFlowStep(StreamDashboardFlowSnapshot snapshot) {
+StreamDashboardFlowStep buildLiveFlowStep(
+  StreamDashboardFlowSnapshot snapshot,
+) {
   return StreamDashboardFlowStep(
     kind: StreamDashboardFlowStepKind.live,
     label: 'WebRTC',

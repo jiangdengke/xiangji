@@ -114,7 +114,7 @@ class ConnectionFailingLivePublisher implements LiveStreamPublisher {
   @override
   Future<void> start(LiveStreamConfig config) async {
     startRequests += 1;
-    const error = WhipSignalingException('无法连接 WHIP 地址，请检查 IP、端口和服务是否已启动。');
+    const error = WhipSignalingException('无法连接 WebRTC 接收端，请检查 IP、端口和服务是否已启动。');
     _statuses.add(
       const LivePublisherStatus(
         phase: LivePublisherPhase.error,

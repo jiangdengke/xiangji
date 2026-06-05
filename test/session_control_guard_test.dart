@@ -84,33 +84,36 @@ void main() {
     );
   });
 
-  test('allows permission continuation only after all selected cameras grant', () {
-    expect(
-      guard.canStartAfterPermission(
-        pendingStartAfterPermission: true,
-        disposed: false,
-        phase: SessionPhase.ready,
-        selectedCameras: <UsbCameraDevice>[
-          _camera('camera-1', permissionGranted: true),
-          _camera('camera-2', permissionGranted: true),
-        ],
-      ),
-      isTrue,
-    );
+  test(
+    'allows permission continuation only after all selected cameras grant',
+    () {
+      expect(
+        guard.canStartAfterPermission(
+          pendingStartAfterPermission: true,
+          disposed: false,
+          phase: SessionPhase.ready,
+          selectedCameras: <UsbCameraDevice>[
+            _camera('camera-1', permissionGranted: true),
+            _camera('camera-2', permissionGranted: true),
+          ],
+        ),
+        isTrue,
+      );
 
-    expect(
-      guard.canStartAfterPermission(
-        pendingStartAfterPermission: true,
-        disposed: false,
-        phase: SessionPhase.ready,
-        selectedCameras: <UsbCameraDevice>[
-          _camera('camera-1', permissionGranted: true),
-          _camera('camera-2', permissionGranted: false),
-        ],
-      ),
-      isFalse,
-    );
-  });
+      expect(
+        guard.canStartAfterPermission(
+          pendingStartAfterPermission: true,
+          disposed: false,
+          phase: SessionPhase.ready,
+          selectedCameras: <UsbCameraDevice>[
+            _camera('camera-1', permissionGranted: true),
+            _camera('camera-2', permissionGranted: false),
+          ],
+        ),
+        isFalse,
+      );
+    },
+  );
 }
 
 UsbCameraDevice _camera(String deviceId, {required bool permissionGranted}) {

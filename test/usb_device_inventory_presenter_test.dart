@@ -7,10 +7,7 @@ void main() {
   const presenter = UsbDeviceInventoryPresenter();
 
   test('describes an empty inventory', () {
-    expect(
-      presenter.messageFor(const <UsbCameraDevice>[]),
-      '未检测到 USB 设备。',
-    );
+    expect(presenter.messageFor(const <UsbCameraDevice>[]), '未检测到 USB 设备。');
   });
 
   test('describes USB devices without video cameras', () {

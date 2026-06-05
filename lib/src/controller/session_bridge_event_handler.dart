@@ -97,10 +97,7 @@ class SessionBridgeEventHandler {
       return;
     }
 
-    final nextState = reduceCameraStatusEvent(
-      phase: phase,
-      message: message,
-    );
+    final nextState = reduceCameraStatusEvent(phase: phase, message: message);
     _state.applyBridgeSessionState(nextState);
     _logSink(
       nextState.logMessage,

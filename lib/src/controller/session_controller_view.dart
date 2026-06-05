@@ -38,8 +38,7 @@ class SessionControllerView {
   List<UsbCameraDevice> get selectedDevices => _deviceRegistry.selectedDevices;
   List<UsbCameraDevice> get selectedVideoDevices =>
       _deviceRegistry.selectedVideoDevices;
-  int get selectedVideoCameraCount =>
-      _deviceRegistry.selectedVideoCameraCount;
+  int get selectedVideoCameraCount => _deviceRegistry.selectedVideoCameraCount;
   bool get hasSelectedVideoCamera => _deviceRegistry.hasSelectedVideoCamera;
   String? get selectedDeviceId => _deviceRegistry.selectedDeviceId;
   UsbCameraDevice? get selectedDevice => _deviceRegistry.selectedDevice;
@@ -51,8 +50,7 @@ class SessionControllerView {
   StreamLogEntry? get latestLog => _logBuffer.latest;
   String get endpointText => _routing.endpointText;
   String get streamIdText => _routing.streamIdPrefix;
-  Map<String, String> get streamIdsByDeviceId =>
-      _routing.streamIdsByDeviceId;
+  Map<String, String> get streamIdsByDeviceId => _routing.streamIdsByDeviceId;
 
   bool get isEndpointValid => _routing.isEndpointValid;
   bool get isStreamIdValid => _routing.isStreamIdPrefixValid;

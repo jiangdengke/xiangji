@@ -8,7 +8,9 @@ import 'package:xiangji/src/domain.dart';
 
 void main() {
   test('prepares none-selected and already-granted states', () {
-    final coordinator = CameraPermissionCoordinator(bridge: _PermissionBridge());
+    final coordinator = CameraPermissionCoordinator(
+      bridge: _PermissionBridge(),
+    );
 
     final none = coordinator.prepare(const <UsbCameraDevice>[]);
     final granted = coordinator.prepare(<UsbCameraDevice>[
@@ -24,28 +26,33 @@ void main() {
     expect(granted.message, contains('都已授权'));
   });
 
-  test('requests only pending camera permissions and returns log messages', () async {
-    final bridge = _PermissionBridge(grantedDeviceIds: <String>{'camera-2'});
-    final coordinator = CameraPermissionCoordinator(bridge: bridge);
-    final preparation = coordinator.prepare(<UsbCameraDevice>[
-      _camera('camera-1', permissionGranted: true),
-      _camera('camera-2', permissionGranted: false),
-      _camera('camera-3', permissionGranted: false),
-    ]);
+  test(
+    'requests only pending camera permissions and returns log messages',
+    () async {
+      final bridge = _PermissionBridge(grantedDeviceIds: <String>{'camera-2'});
+      final coordinator = CameraPermissionCoordinator(bridge: bridge);
+      final preparation = coordinator.prepare(<UsbCameraDevice>[
+        _camera('camera-1', permissionGranted: true),
+        _camera('camera-2', permissionGranted: false),
+        _camera('camera-3', permissionGranted: false),
+      ]);
 
-    final logs = await coordinator.requestPending(preparation);
+      final logs = await coordinator.requestPending(preparation);
 
-    expect(preparation.shouldRequest, isTrue);
-    expect(
-      preparation.pendingDevices.map((UsbCameraDevice device) => device.deviceId),
-      <String>['camera-2', 'camera-3'],
-    );
-    expect(bridge.permissionRequests, <String>['camera-2', 'camera-3']);
-    expect(logs.map((CameraPermissionRequestLog log) => log.message), <String>[
-      'camera-2 已授权。',
-      '已发送 camera-3 的权限请求。',
-    ]);
-  });
+      expect(preparation.shouldRequest, isTrue);
+      expect(
+        preparation.pendingDevices.map(
+          (UsbCameraDevice device) => device.deviceId,
+        ),
+        <String>['camera-2', 'camera-3'],
+      );
+      expect(bridge.permissionRequests, <String>['camera-2', 'camera-3']);
+      expect(
+        logs.map((CameraPermissionRequestLog log) => log.message),
+        <String>['camera-2 已授权。', '已发送 camera-3 的权限请求。'],
+      );
+    },
+  );
 }
 
 UsbCameraDevice _camera(String deviceId, {required bool permissionGranted}) {
@@ -76,7 +83,8 @@ class _PermissionBridge implements CameraBridge {
   Future<bool> isSupported() async => true;
 
   @override
-  Future<List<UsbCameraDevice>> listDevices() async => const <UsbCameraDevice>[];
+  Future<List<UsbCameraDevice>> listDevices() async =>
+      const <UsbCameraDevice>[];
 
   @override
   Future<bool> requestPermission(String deviceId) async {

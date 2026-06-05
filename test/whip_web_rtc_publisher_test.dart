@@ -55,7 +55,7 @@ void main() {
       );
       expect(
         statuses.map((status) => status.details.toString()),
-        contains(contains('无法连接 WHIP 地址')),
+        contains(contains('无法连接 WebRTC 接收端')),
       );
 
       await subscription.cancel();

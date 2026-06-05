@@ -16,7 +16,7 @@ String whipPublisherStreamingMessage({
   if (resourceUri == null) {
     return '$label WebRTC 实时推流已建立。';
   }
-  return '$label WebRTC 实时推流已建立，停止时会释放 WHIP 会话。';
+  return '$label WebRTC 实时推流已建立。';
 }
 
 String whipPublisherStartFailedMessage(LiveStreamConfig config) {

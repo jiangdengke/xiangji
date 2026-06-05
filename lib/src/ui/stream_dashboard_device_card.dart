@@ -21,8 +21,7 @@ class StreamDashboardDeviceCard extends StatefulWidget {
       _StreamDashboardDeviceCardState();
 }
 
-class _StreamDashboardDeviceCardState
-    extends State<StreamDashboardDeviceCard> {
+class _StreamDashboardDeviceCardState extends State<StreamDashboardDeviceCard> {
   late final TextEditingController _streamIdController;
 
   XiangjiSessionController get controller => widget.controller;

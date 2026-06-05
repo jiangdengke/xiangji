@@ -3,7 +3,7 @@ import 'live_stream_id_policy.dart';
 
 class LiveStreamIdRegistry {
   LiveStreamIdRegistry({
-    String streamIdPrefix = 'camera-001',
+    String streamIdPrefix = 'camera',
     LiveStreamIdPolicy policy = const LiveStreamIdPolicy(),
   }) : _streamIdPrefix = streamIdPrefix.trim(),
        _policy = policy;
@@ -17,7 +17,7 @@ class LiveStreamIdRegistry {
   Map<String, String> get streamIdsByDeviceId =>
       Map<String, String>.unmodifiable(_streamIdsByDeviceId);
   Iterable<String> get streamIds => _streamIdsByDeviceId.values;
-  bool get isStreamIdPrefixValid => _policy.isValid(_streamIdPrefix);
+  bool get isStreamIdPrefixValid => _policy.isPrefixValid(_streamIdPrefix);
 
   void updateStreamIdPrefix(String value, Iterable<UsbCameraDevice> devices) {
     _streamIdPrefix = value.trim();

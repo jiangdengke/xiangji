@@ -14,7 +14,7 @@ void main() {
 
   test('rejects duplicate stream ids before endpoint startup', () {
     final routing = _routing()..syncDevices(_cameras);
-    routing.setCustomStreamId('camera-2', 'camera-001-01');
+    routing.setCustomStreamId('camera-2', 'camera1');
 
     final preparation = LiveStreamStartPreparer(
       routing: routing,
@@ -62,8 +62,8 @@ LiveStreamStartPreparer _preparer() {
 
 LiveStreamRouting _routing() {
   return LiveStreamRouting(
-    endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-    streamIdPrefix: 'camera-001',
+    endpointText: 'http://127.0.0.1:9090/offer/camera1',
+    streamIdPrefix: 'camera',
   );
 }
 

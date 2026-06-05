@@ -6,10 +6,7 @@ import 'stream_dashboard_common.dart';
 import 'stream_dashboard_log_presenter.dart';
 
 class StreamDashboardLogOverview extends StatelessWidget {
-  const StreamDashboardLogOverview({
-    super.key,
-    required this.controller,
-  });
+  const StreamDashboardLogOverview({super.key, required this.controller});
 
   final XiangjiSessionController controller;
 

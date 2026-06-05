@@ -21,17 +21,20 @@ class LiveStreamStartPreparer {
 
     if (!_routing.isStreamIdPrefixValid) {
       return LiveStreamStartPreparation.rejected(
-        message: '默认流 ID 前缀不能为空，也不能包含空白字符。',
+        message: '默认摄像头名前缀不能为空，也不能包含空白字符。',
         topic: LogTopic.session,
       );
     }
 
-    final invalidStreamIdDevices = cameras.where((UsbCameraDevice device) {
-      return !_routing.isDeviceStreamIdValid(device.deviceId);
-    }).toList(growable: false);
+    final invalidStreamIdDevices = cameras
+        .where((UsbCameraDevice device) {
+          return !_routing.isDeviceStreamIdValid(device.deviceId);
+        })
+        .toList(growable: false);
     if (invalidStreamIdDevices.isNotEmpty) {
       return LiveStreamStartPreparation.rejected(
-        message: '有 ${invalidStreamIdDevices.length} 路摄像头的流 ID 无效，请先修正。',
+        message:
+            '有 ${invalidStreamIdDevices.length} 路摄像头的 camera_name 无效，请使用 camera1、camera2、camera3 或 camera4。',
         topic: LogTopic.session,
       );
     }

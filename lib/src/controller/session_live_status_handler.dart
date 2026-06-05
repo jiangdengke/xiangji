@@ -37,10 +37,7 @@ class SessionLiveStatusHandler {
       return;
     }
 
-    _state.applyLivePublisherStatus(
-      status,
-      hasUsbDevices: _hasUsbDevices(),
-    );
+    _state.applyLivePublisherStatus(status, hasUsbDevices: _hasUsbDevices());
     _logSink(
       status.message,
       logLevelForLivePublisherStatus(status),

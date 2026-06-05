@@ -6,49 +6,40 @@ import 'package:xiangji/src/domain.dart';
 import 'support/xiangji_session_test_doubles.dart';
 
 void main() {
-  test('controller starts WebRTC for every selected camera stream ID', () async {
-    final bridge = TestBridge();
-    final livePublisher = RecordingLivePublisher();
-    final controller = XiangjiSessionController(
-      bridge: bridge,
-      livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/whip/unit-stream',
-      streamIdText: 'unit-stream',
-    );
+  test(
+    'controller starts WebRTC for every selected camera stream ID',
+    () async {
+      final bridge = TestBridge();
+      final livePublisher = RecordingLivePublisher();
+      final controller = XiangjiSessionController(
+        bridge: bridge,
+        livePublisher: livePublisher,
+        endpointText: 'http://127.0.0.1:9090/offer/camera1',
+        streamIdText: 'camera',
+      );
 
-    await controller.initialize();
-    expect(controller.selectedVideoCameraCount, 2);
-    expect(controller.streamIdForDeviceId('usb-1'), 'unit-stream-01');
-    expect(controller.streamIdForDeviceId('usb-2'), 'unit-stream-02');
+      await controller.initialize();
+      expect(controller.selectedVideoCameraCount, 2);
+      expect(controller.streamIdForDeviceId('usb-1'), 'camera1');
+      expect(controller.streamIdForDeviceId('usb-2'), 'camera2');
 
-    await controller.start();
-    await Future<void>.delayed(Duration.zero);
+      await controller.start();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(controller.phase, SessionPhase.streaming);
-    expect(controller.isLiveStreaming, isTrue);
-    expect(livePublisher.startConfigs, hasLength(2));
-    expect(
-      livePublisher.startConfigs[0].endpoint.path,
-      '/whip/unit-stream-01',
-    );
-    expect(livePublisher.startConfigs[0].streamId, 'unit-stream-01');
-    expect(livePublisher.startConfigs[0].deviceId, 'usb-1');
-    expect(
-      livePublisher.startConfigs[0].cameraName,
-      'Unit Test Camera 1',
-    );
-    expect(
-      livePublisher.startConfigs[1].endpoint.path,
-      '/whip/unit-stream-02',
-    );
-    expect(livePublisher.startConfigs[1].streamId, 'unit-stream-02');
-    expect(livePublisher.startConfigs[1].deviceId, 'usb-2');
-    expect(
-      livePublisher.startConfigs[1].cameraName,
-      'Unit Test Camera 2',
-    );
-    controller.dispose();
-  });
+      expect(controller.phase, SessionPhase.streaming);
+      expect(controller.isLiveStreaming, isTrue);
+      expect(livePublisher.startConfigs, hasLength(2));
+      expect(livePublisher.startConfigs[0].endpoint.path, '/offer/camera1');
+      expect(livePublisher.startConfigs[0].streamId, 'camera1');
+      expect(livePublisher.startConfigs[0].deviceId, 'usb-1');
+      expect(livePublisher.startConfigs[0].cameraName, 'Unit Test Camera 1');
+      expect(livePublisher.startConfigs[1].endpoint.path, '/offer/camera2');
+      expect(livePublisher.startConfigs[1].streamId, 'camera2');
+      expect(livePublisher.startConfigs[1].deviceId, 'usb-2');
+      expect(livePublisher.startConfigs[1].cameraName, 'Unit Test Camera 2');
+      controller.dispose();
+    },
+  );
 
   test('controller appends stream IDs to an offer endpoint', () async {
     final bridge = TestBridge();
@@ -56,8 +47,8 @@ void main() {
     final controller = XiangjiSessionController(
       bridge: bridge,
       livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/offer',
-      streamIdText: 'camera-001',
+      endpointText: 'http://127.0.0.1:9090/offer',
+      streamIdText: 'camera',
     );
 
     await controller.initialize();
@@ -67,11 +58,11 @@ void main() {
     expect(livePublisher.startConfigs, hasLength(2));
     expect(
       livePublisher.startConfigs.map((config) => config.endpoint.path),
-      containsAll(<String>['/offer/camera-001-01', '/offer/camera-001-02']),
+      containsAll(<String>['/offer/camera1', '/offer/camera2']),
     );
     expect(
       livePublisher.startConfigs.map((config) => config.streamId),
-      containsAll(<String>['camera-001-01', 'camera-001-02']),
+      containsAll(<String>['camera1', 'camera2']),
     );
 
     controller.dispose();
@@ -83,17 +74,17 @@ void main() {
     final controller = XiangjiSessionController(
       bridge: bridge,
       livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-      streamIdText: 'camera-001',
+      endpointText: 'http://127.0.0.1:9090/offer/camera1',
+      streamIdText: 'camera',
     );
 
     await controller.initialize();
     controller
       ..setDeviceSelected('usb-1', false)
-      ..updateDeviceStreamIdText('usb-2', 'loading-bay');
+      ..updateDeviceStreamIdText('usb-2', 'camera4');
 
-    expect(controller.streamIdForDeviceId('usb-1'), 'camera-001-01');
-    expect(controller.streamIdForDeviceId('usb-2'), 'loading-bay');
+    expect(controller.streamIdForDeviceId('usb-1'), 'camera1');
+    expect(controller.streamIdForDeviceId('usb-2'), 'camera4');
     expect(controller.isDeviceStreamIdCustom('usb-2'), isTrue);
     expect(controller.canStart, isTrue);
 
@@ -101,15 +92,9 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(livePublisher.startConfigs, hasLength(1));
-    expect(livePublisher.startConfigs.single.streamId, 'loading-bay');
-    expect(
-      livePublisher.startConfigs.single.endpoint.path,
-      '/whip/loading-bay',
-    );
-    expect(
-      livePublisher.startConfigs.single.cameraName,
-      'Unit Test Camera 2',
-    );
+    expect(livePublisher.startConfigs.single.streamId, 'camera4');
+    expect(livePublisher.startConfigs.single.endpoint.path, '/offer/camera4');
+    expect(livePublisher.startConfigs.single.cameraName, 'Unit Test Camera 2');
 
     controller.dispose();
   });

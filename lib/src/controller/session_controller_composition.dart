@@ -26,7 +26,7 @@ class SessionControllerComposition {
     required LiveStreamPublisher livePublisher,
     required VoidCallback notifyListeners,
     String endpointText = '',
-    String streamIdText = 'camera-001',
+    String streamIdText = 'camera',
   }) : _notifyListeners = notifyListeners,
        _logger = SessionControllerLogger(notifyListeners: notifyListeners),
        _routing = LiveStreamRouting(

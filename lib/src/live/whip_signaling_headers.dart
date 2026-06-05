@@ -12,8 +12,8 @@ Map<String, String> whipOfferHeaders({
 }) {
   return <String, String>{
     ...whipAuthorizationHeaders(bearerToken),
-    'Accept': 'application/sdp',
-    'Content-Type': 'application/sdp',
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
     'X-Stream-Id': streamId,
   };
 }

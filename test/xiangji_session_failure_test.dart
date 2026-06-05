@@ -6,26 +6,29 @@ import 'package:xiangji/src/domain.dart';
 import 'support/xiangji_session_test_doubles.dart';
 
 void main() {
-  test('controller keeps app state after live publisher start failure', () async {
-    final bridge = TestBridge();
-    final livePublisher = FailingLivePublisher();
-    final controller = XiangjiSessionController(
-      bridge: bridge,
-      livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-    );
+  test(
+    'controller keeps app state after live publisher start failure',
+    () async {
+      final bridge = TestBridge();
+      final livePublisher = FailingLivePublisher();
+      final controller = XiangjiSessionController(
+        bridge: bridge,
+        livePublisher: livePublisher,
+        endpointText: 'http://127.0.0.1:9090/offer/camera1',
+      );
 
-    await controller.initialize();
-    await controller.start();
+      await controller.initialize();
+      await controller.start();
 
-    expect(livePublisher.startRequests, 1);
-    expect(controller.phase, SessionPhase.error);
-    expect(controller.isLiveStreaming, isFalse);
-    expect(controller.lastError, contains('测试推流失败'));
-    expect(controller.latestLog?.message, contains('启动失败'));
+      expect(livePublisher.startRequests, 1);
+      expect(controller.phase, SessionPhase.error);
+      expect(controller.isLiveStreaming, isFalse);
+      expect(controller.lastError, contains('测试推流失败'));
+      expect(controller.latestLog?.message, contains('启动失败'));
 
-    controller.dispose();
-  });
+      controller.dispose();
+    },
+  );
 
   test('controller stops started streams when a later stream fails', () async {
     final bridge = TestBridge();
@@ -33,7 +36,7 @@ void main() {
     final controller = XiangjiSessionController(
       bridge: bridge,
       livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
+      endpointText: 'http://127.0.0.1:9090/offer/camera1',
     );
 
     await controller.initialize();
@@ -41,8 +44,8 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(livePublisher.startConfigs, hasLength(2));
-    expect(livePublisher.startConfigs[0].streamId, 'camera-001-01');
-    expect(livePublisher.startConfigs[1].streamId, 'camera-001-02');
+    expect(livePublisher.startConfigs[0].streamId, 'camera1');
+    expect(livePublisher.startConfigs[1].streamId, 'camera2');
     expect(livePublisher.stopRequests, 1);
     expect(controller.phase, SessionPhase.error);
     expect(controller.isLiveStreaming, isFalse);
@@ -51,27 +54,30 @@ void main() {
     controller.dispose();
   });
 
-  test('controller logs WHIP connection failure without crashing', () async {
-    final bridge = TestBridge();
-    final livePublisher = ConnectionFailingLivePublisher();
-    final controller = XiangjiSessionController(
-      bridge: bridge,
-      livePublisher: livePublisher,
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-    );
+  test(
+    'controller logs receiver connection failure without crashing',
+    () async {
+      final bridge = TestBridge();
+      final livePublisher = ConnectionFailingLivePublisher();
+      final controller = XiangjiSessionController(
+        bridge: bridge,
+        livePublisher: livePublisher,
+        endpointText: 'http://127.0.0.1:9090/offer/camera1',
+      );
 
-    await controller.initialize();
-    await controller.start();
+      await controller.initialize();
+      await controller.start();
 
-    expect(livePublisher.startRequests, 1);
-    expect(controller.phase, SessionPhase.error);
-    expect(controller.isLiveStreaming, isFalse);
-    expect(controller.lastError, contains('无法连接 WHIP 地址'));
-    expect(
-      controller.logs.map((entry) => entry.message),
-      contains(contains('启动失败')),
-    );
+      expect(livePublisher.startRequests, 1);
+      expect(controller.phase, SessionPhase.error);
+      expect(controller.isLiveStreaming, isFalse);
+      expect(controller.lastError, contains('无法连接 WebRTC 接收端'));
+      expect(
+        controller.logs.map((entry) => entry.message),
+        contains(contains('启动失败')),
+      );
 
-    controller.dispose();
-  });
+      controller.dispose();
+    },
+  );
 }

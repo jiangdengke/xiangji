@@ -10,7 +10,7 @@ class XiangjiSessionController extends ChangeNotifier {
     required CameraBridge bridge,
     required LiveStreamPublisher livePublisher,
     String endpointText = '',
-    String streamIdText = 'camera-001',
+    String streamIdText = 'camera',
   }) {
     _composition = SessionControllerComposition(
       bridge: bridge,
@@ -34,13 +34,13 @@ class XiangjiSessionController extends ChangeNotifier {
   bool get hasVideoCamera => _composition.view.hasVideoCamera;
   int get videoCameraCount => _composition.view.videoCameraCount;
   Set<String> get selectedDeviceIds => _composition.view.selectedDeviceIds;
-  List<UsbCameraDevice> get selectedDevices => _composition.view.selectedDevices;
+  List<UsbCameraDevice> get selectedDevices =>
+      _composition.view.selectedDevices;
   List<UsbCameraDevice> get selectedVideoDevices =>
       _composition.view.selectedVideoDevices;
   int get selectedVideoCameraCount =>
       _composition.view.selectedVideoCameraCount;
-  bool get hasSelectedVideoCamera =>
-      _composition.view.hasSelectedVideoCamera;
+  bool get hasSelectedVideoCamera => _composition.view.hasSelectedVideoCamera;
   String? get selectedDeviceId => _composition.view.selectedDeviceId;
   UsbCameraDevice? get selectedDevice => _composition.view.selectedDevice;
 

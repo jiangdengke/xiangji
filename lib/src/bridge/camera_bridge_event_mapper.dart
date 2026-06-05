@@ -38,9 +38,7 @@ class CameraBridgeEventMapper {
     return (value as List? ?? const <Object?>[])
         .whereType<Map>()
         .map(
-          (Map map) => UsbCameraDevice.fromMap(
-            Map<Object?, Object?>.from(map),
-          ),
+          (Map map) => UsbCameraDevice.fromMap(Map<Object?, Object?>.from(map)),
         )
         .toList(growable: false);
   }

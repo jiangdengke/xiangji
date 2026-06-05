@@ -1,9 +1,7 @@
 import 'dart:io';
 
-typedef WhipEndpointProbe = Future<void> Function(
-  Uri endpoint,
-  Duration timeout,
-);
+typedef WhipEndpointProbe =
+    Future<void> Function(Uri endpoint, Duration timeout);
 
 Future<void> probeWhipEndpoint(Uri endpoint, Duration timeout) async {
   final socket = await Socket.connect(

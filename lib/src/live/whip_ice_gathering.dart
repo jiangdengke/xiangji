@@ -35,7 +35,7 @@ class WhipIceGatheringWaiter {
     } on TimeoutException catch (error) {
       statusSink(
         LivePublisherPhase.connecting,
-        'ICE 候选收集超时，继续尝试 WHIP 推流。',
+        'ICE 候选收集超时，继续尝试 WebRTC 推流。',
         error,
       );
     } finally {

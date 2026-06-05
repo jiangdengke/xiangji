@@ -9,7 +9,7 @@ String sessionLiveStopFailedLogMessage(Object error) {
 }
 
 String sessionLiveOfferSentLogMessage(LiveStreamStartedStream stream) {
-  return '已向 WHIP 服务端推送 ${stream.camera.deviceName} 的 WebRTC offer，流 ID：${stream.streamId}。';
+  return '已向接收端推送 ${stream.camera.deviceName} 的 WebRTC offer，流 ID：${stream.streamId}。';
 }
 
 String sessionLiveStartedLogMessage(LiveStreamStartResult result) {

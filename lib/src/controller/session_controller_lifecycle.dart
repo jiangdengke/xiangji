@@ -14,7 +14,9 @@ class SessionControllerLifecycle {
   }) : _bridge = bridge,
        _livePublisher = livePublisher,
        _state = state {
-    _bridgeSubscription = _bridge.events.listen(eventHandlers.handleBridgeEvent);
+    _bridgeSubscription = _bridge.events.listen(
+      eventHandlers.handleBridgeEvent,
+    );
     _liveSubscription = _livePublisher.statuses.listen(
       eventHandlers.handleLiveStatus,
     );

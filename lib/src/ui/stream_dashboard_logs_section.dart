@@ -108,10 +108,4 @@ class _StreamDashboardLogsSectionState
   }
 }
 
-enum _StreamDashboardLogFilter {
-  all,
-  device,
-  permission,
-  session,
-  errors,
-}
+enum _StreamDashboardLogFilter { all, device, permission, session, errors }

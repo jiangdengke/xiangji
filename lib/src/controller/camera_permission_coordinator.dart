@@ -1,7 +1,11 @@
 import '../bridge/camera_bridge.dart';
 import '../domain.dart';
 
-enum CameraPermissionPreparationKind { noneSelected, alreadyGranted, needsRequest }
+enum CameraPermissionPreparationKind {
+  noneSelected,
+  alreadyGranted,
+  needsRequest,
+}
 
 class CameraPermissionPreparation {
   CameraPermissionPreparation._({

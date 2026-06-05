@@ -64,9 +64,7 @@ class SessionDeviceActions {
   void selectAllVideoDevices() {
     final selectedCount = _deviceRegistry.selectAllVideoDevices();
     _logSink(
-      selectedCount == 0
-          ? '没有可选的视频摄像头。'
-          : '已选择全部 $selectedCount 个视频摄像头。',
+      selectedCount == 0 ? '没有可选的视频摄像头。' : '已选择全部 $selectedCount 个视频摄像头。',
       selectedCount == 0 ? LogLevel.warning : LogLevel.info,
       null,
       true,

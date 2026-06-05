@@ -9,16 +9,15 @@ import 'package:xiangji/src/live/live_stream_publisher.dart';
 import 'package:xiangji/src/live/whip_signaling_client.dart';
 
 void main() {
-  test('signaling client posts WHIP offer headers and resolves location', () async {
+  test('signaling client posts JSON offer and reads JSON answer', () async {
     final requests = <_RecordedRequest>[];
     final client = WhipSignalingClient(
       client: _RecordingHttpClient(
         onRequest: (http.BaseRequest request, String body) async {
           requests.add(_RecordedRequest(request: request, body: body));
           return http.Response(
-            'answer-sdp',
+            jsonEncode(<String, String>{'sdp': 'v=0\r\n', 'type': 'answer'}),
             201,
-            headers: <String, String>{'location': '../resource/abc'},
           );
         },
       ),
@@ -27,54 +26,52 @@ void main() {
 
     final result = await client.publishOffer(
       config: LiveStreamConfig(
-        endpoint: Uri.parse('http://127.0.0.1:8080/whip/camera-001'),
-        streamId: 'camera-001',
+        endpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
+        streamId: 'camera1',
         bearerToken: ' token ',
       ),
       sdp: 'offer-sdp',
     );
 
-    expect(result.answerSdp, 'answer-sdp');
-    expect(
-      result.resourceUri,
-      Uri.parse('http://127.0.0.1:8080/resource/abc'),
-    );
+    expect(result.answerSdp, 'v=0');
+    expect(result.answerType, 'answer');
+    expect(result.resourceUri, isNull);
     expect(requests, hasLength(1));
     expect(requests.single.request.method, 'POST');
-    expect(requests.single.body, 'offer-sdp');
-    expect(requests.single.request.headers['Accept'], 'application/sdp');
-    expect(
-      requests.single.request.headers['Content-Type'],
-      'application/sdp',
-    );
-    expect(requests.single.request.headers['X-Stream-Id'], 'camera-001');
-    expect(
-      requests.single.request.headers['Authorization'],
-      'Bearer token',
-    );
+    expect(jsonDecode(requests.single.body), <String, dynamic>{
+      'sdp': 'offer-sdp',
+      'type': 'offer',
+    });
+    expect(requests.single.request.headers['Accept'], 'application/json');
+    expect(requests.single.request.headers['Content-Type'], 'application/json');
+    expect(requests.single.request.headers['X-Stream-Id'], 'camera1');
+    expect(requests.single.request.headers['Authorization'], 'Bearer token');
 
     client.close();
   });
 
-  test('signaling client maps failed preflight to WHIP exception', () async {
-    final client = WhipSignalingClient(
-      client: _RecordingHttpClient(
-        onRequest: (_, _) async => http.Response('unused', 200),
-      ),
-      endpointProbe: (_, _) async {
-        throw const SocketException('Connection refused');
-      },
-    );
+  test(
+    'signaling client maps failed preflight to signaling exception',
+    () async {
+      final client = WhipSignalingClient(
+        client: _RecordingHttpClient(
+          onRequest: (_, _) async => http.Response('unused', 200),
+        ),
+        endpointProbe: (_, _) async {
+          throw const SocketException('Connection refused');
+        },
+      );
 
-    await expectLater(
-      client.preflight(Uri.parse('http://127.0.0.1:65535/whip/camera-001')),
-      throwsA(isA<WhipSignalingException>()),
-    );
+      await expectLater(
+        client.preflight(Uri.parse('http://127.0.0.1:65535/offer/camera1')),
+        throwsA(isA<WhipSignalingException>()),
+      );
 
-    client.close();
-  });
+      client.close();
+    },
+  );
 
-  test('signaling client reports non-success WHIP responses', () async {
+  test('signaling client reports non-success receiver responses', () async {
     final client = WhipSignalingClient(
       client: _RecordingHttpClient(
         onRequest: (_, _) async => http.Response('bad request', 400),
@@ -85,8 +82,8 @@ void main() {
     await expectLater(
       client.publishOffer(
         config: LiveStreamConfig(
-          endpoint: Uri.parse('http://127.0.0.1:8080/whip/camera-001'),
-          streamId: 'camera-001',
+          endpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
+          streamId: 'camera1',
         ),
         sdp: 'offer-sdp',
       ),
@@ -95,6 +92,61 @@ void main() {
           (WhipSignalingException error) => error.toString(),
           'message',
           contains('HTTP 400'),
+        ),
+      ),
+    );
+
+    client.close();
+  });
+
+  test('signaling client still accepts raw SDP answers', () async {
+    final client = WhipSignalingClient(
+      client: _RecordingHttpClient(
+        onRequest: (_, _) async => http.Response('v=0\r\n', 201),
+      ),
+      endpointProbe: (_, _) async {},
+    );
+
+    final result = await client.publishOffer(
+      config: LiveStreamConfig(
+        endpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
+        streamId: 'camera1',
+      ),
+      sdp: 'offer-sdp',
+    );
+
+    expect(result.answerSdp, 'v=0');
+    expect(result.answerType, 'answer');
+
+    client.close();
+  });
+
+  test('signaling client rejects non-SDP answers before WebRTC', () async {
+    final client = WhipSignalingClient(
+      client: _RecordingHttpClient(
+        onRequest: (_, _) async {
+          return http.Response(
+            jsonEncode(<String, String>{'sdp': 'not-sdp', 'type': 'answer'}),
+            201,
+          );
+        },
+      ),
+      endpointProbe: (_, _) async {},
+    );
+
+    await expectLater(
+      client.publishOffer(
+        config: LiveStreamConfig(
+          endpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
+          streamId: 'camera1',
+        ),
+        sdp: 'offer-sdp',
+      ),
+      throwsA(
+        isA<WhipSignalingException>().having(
+          (WhipSignalingException error) => error.toString(),
+          'message',
+          contains('不是有效 SDP'),
         ),
       ),
     );

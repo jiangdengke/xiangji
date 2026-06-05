@@ -5,7 +5,7 @@ import 'live_stream_id_registry.dart';
 class LiveStreamRouting {
   LiveStreamRouting({
     String endpointText = '',
-    String streamIdPrefix = 'camera-001',
+    String streamIdPrefix = 'camera',
   }) : _endpoint = LiveStreamEndpoint(endpointText: endpointText),
        _streamIds = LiveStreamIdRegistry(streamIdPrefix: streamIdPrefix);
 
@@ -14,8 +14,7 @@ class LiveStreamRouting {
 
   String get endpointText => _endpoint.text;
   String get streamIdPrefix => _streamIds.streamIdPrefix;
-  Map<String, String> get streamIdsByDeviceId =>
-      _streamIds.streamIdsByDeviceId;
+  Map<String, String> get streamIdsByDeviceId => _streamIds.streamIdsByDeviceId;
 
   bool get isEndpointValid => _endpoint.isValid;
   bool get isStreamIdPrefixValid => _streamIds.isStreamIdPrefixValid;

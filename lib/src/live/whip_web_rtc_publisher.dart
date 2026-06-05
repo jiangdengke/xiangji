@@ -41,7 +41,6 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
       statusSink: _statusController.sink,
     );
     _sessionStopper = WhipWebRtcSessionStopper(
-      signalingClient: _signalingClient,
       statusSink: _statusController.sink,
     );
   }

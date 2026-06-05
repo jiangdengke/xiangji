@@ -8,39 +8,44 @@ import 'package:xiangji/src/live/live_stream_routing.dart';
 import 'package:xiangji/src/live/live_stream_session_coordinator.dart';
 
 void main() {
-  test('prepares selected camera streams and starts each publisher config', () async {
-    final routing = LiveStreamRouting(
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-      streamIdPrefix: 'camera-001',
-    )..syncDevices(_cameras);
-    final publisher = _RecordingLivePublisher();
-    final coordinator = LiveStreamSessionCoordinator(
-      publisher: publisher,
-      routing: routing,
-    );
+  test(
+    'prepares selected camera streams and starts each publisher config',
+    () async {
+      final routing = LiveStreamRouting(
+        endpointText: 'http://127.0.0.1:9090/offer/camera1',
+        streamIdPrefix: 'camera',
+      )..syncDevices(_cameras);
+      final publisher = _RecordingLivePublisher();
+      final coordinator = LiveStreamSessionCoordinator(
+        publisher: publisher,
+        routing: routing,
+      );
 
-    final preparation = coordinator.prepare(_cameras);
-    final started = <LiveStreamStartedStream>[];
-    final result = await coordinator.start(
-      preparation,
-      onStreamStarted: started.add,
-    );
+      final preparation = coordinator.prepare(_cameras);
+      final started = <LiveStreamStartedStream>[];
+      final result = await coordinator.start(
+        preparation,
+        onStreamStarted: started.add,
+      );
 
-    expect(preparation.isReady, isTrue);
-    expect(result.streamIds, <String>['camera-001-01', 'camera-001-02']);
-    expect(started, hasLength(2));
-    expect(
-      publisher.startConfigs.map((LiveStreamConfig config) => config.endpoint.path),
-      <String>['/whip/camera-001-01', '/whip/camera-001-02'],
-    );
-  });
+      expect(preparation.isReady, isTrue);
+      expect(result.streamIds, <String>['camera1', 'camera2']);
+      expect(started, hasLength(2));
+      expect(
+        publisher.startConfigs.map(
+          (LiveStreamConfig config) => config.endpoint.path,
+        ),
+        <String>['/offer/camera1', '/offer/camera2'],
+      );
+    },
+  );
 
   test('rejects duplicate stream IDs before starting publisher', () {
     final routing = LiveStreamRouting(
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-      streamIdPrefix: 'camera-001',
+      endpointText: 'http://127.0.0.1:9090/offer/camera1',
+      streamIdPrefix: 'camera',
     )..syncDevices(_cameras);
-    routing.setCustomStreamId('camera-2', 'camera-001-01');
+    routing.setCustomStreamId('camera-2', 'camera1');
     final publisher = _RecordingLivePublisher();
     final coordinator = LiveStreamSessionCoordinator(
       publisher: publisher,
@@ -56,8 +61,8 @@ void main() {
 
   test('stops already started streams when a later stream fails', () async {
     final routing = LiveStreamRouting(
-      endpointText: 'http://127.0.0.1:8080/whip/camera-001',
-      streamIdPrefix: 'camera-001',
+      endpointText: 'http://127.0.0.1:9090/offer/camera1',
+      streamIdPrefix: 'camera',
     )..syncDevices(_cameras);
     final publisher = _FailingAfterFirstLivePublisher();
     final coordinator = LiveStreamSessionCoordinator(
