@@ -79,7 +79,7 @@ class WhipWebRtcSessionStarter {
       );
       session.resourceUri = offerResult.resourceUri;
       await peerConnection.setRemoteDescription(
-        RTCSessionDescription(offerResult.answerSdp, offerResult.answerType),
+        RTCSessionDescription(offerResult.answerSdp, 'answer'),
       );
       return session;
     } catch (error, stackTrace) {
