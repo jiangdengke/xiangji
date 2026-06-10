@@ -130,6 +130,10 @@ class SessionLiveOrchestrator {
 
   void _handleStartFailure(Object error, StackTrace stackTrace) {
     _state.failStart(error);
+    if (_isReportedByPublisher(error)) {
+      _notifyListeners();
+      return;
+    }
     _logSink(
       sessionLiveStartFailedLogMessage(error),
       LogLevel.error,
@@ -137,5 +141,9 @@ class SessionLiveOrchestrator {
       true,
       LogTopic.session,
     );
+  }
+
+  bool _isReportedByPublisher(Object error) {
+    return error is LivePublisherReportedError && error.reportedByPublisher;
   }
 }

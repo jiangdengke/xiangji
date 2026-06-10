@@ -72,10 +72,9 @@ void main() {
       expect(controller.phase, SessionPhase.error);
       expect(controller.isLiveStreaming, isFalse);
       expect(controller.lastError, contains('无法连接 WebRTC 接收端'));
-      expect(
-        controller.logs.map((entry) => entry.message),
-        contains(contains('启动失败')),
-      );
+      final messages = controller.logs.map((entry) => entry.message).toList();
+      expect(messages, contains(contains('WebRTC 实时推流启动失败。')));
+      expect(messages.any((message) => message.startsWith('启动失败：')), isFalse);
 
       controller.dispose();
     },

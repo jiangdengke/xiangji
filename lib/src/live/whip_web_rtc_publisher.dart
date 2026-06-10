@@ -96,8 +96,18 @@ class WhipWebRtcPublisher implements LiveStreamPublisher {
         whipPublisherStartFailedMessage(config),
         error,
       );
-      Error.throwWithStackTrace(error, stackTrace);
+      Error.throwWithStackTrace(_reportedPublisherError(error), stackTrace);
     }
+  }
+
+  Object _reportedPublisherError(Object error) {
+    if (error is WhipSignalingException) {
+      return error.asReportedByPublisher();
+    }
+    if (error is LivePublisherReportedError && error.reportedByPublisher) {
+      return error;
+    }
+    return LivePublisherReportedException(error);
   }
 
   @override

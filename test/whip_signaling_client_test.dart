@@ -53,6 +53,16 @@ m=video 9 UDP/TLS/RTP/SAVPF 96
     expect(result.diagnostics.hasIceUfrag, isTrue);
     expect(result.diagnostics.hasIcePwd, isTrue);
     expect(result.diagnostics.answerPreview, contains('v=0'));
+    expect(result.diagnostics.answerSdp, answerSdp.trim());
+    expect(
+      result.diagnostics.describe(
+        config: LiveStreamConfig(
+          endpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
+          streamId: 'camera1',
+        ),
+      ),
+      contains('完整 answer SDP:\n${answerSdp.trim()}'),
+    );
     expect(requests, hasLength(1));
     expect(requests.single.request.method, 'POST');
     expect(jsonDecode(requests.single.body), <String, dynamic>{

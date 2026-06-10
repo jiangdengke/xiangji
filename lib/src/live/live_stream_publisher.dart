@@ -45,6 +45,25 @@ class LivePublisherStatus {
   final Object? details;
 }
 
+abstract interface class LivePublisherReportedError {
+  bool get reportedByPublisher;
+}
+
+class LivePublisherReportedException
+    implements Exception, LivePublisherReportedError {
+  const LivePublisherReportedException(this.error);
+
+  final Object error;
+
+  @override
+  bool get reportedByPublisher => true;
+
+  @override
+  String toString() {
+    return error.toString();
+  }
+}
+
 abstract class LiveStreamPublisher {
   Stream<LivePublisherStatus> get statuses;
 

@@ -178,6 +178,7 @@ class WhipAnswerDiagnostics {
     required this.responseContentType,
     required this.answerType,
     required this.answerPreview,
+    required this.answerSdp,
     required this.answerLineCount,
     required this.hasFingerprint,
     required this.hasIceUfrag,
@@ -196,6 +197,7 @@ class WhipAnswerDiagnostics {
       responseContentType: response.headers['content-type'],
       answerType: answer.type,
       answerPreview: _bodyPreview(sdp),
+      answerSdp: sdp,
       answerLineCount: sdp.isEmpty ? 0 : sdp.split(RegExp(r'\r?\n')).length,
       hasFingerprint: sdp.contains('a=fingerprint:'),
       hasIceUfrag: sdp.contains('a=ice-ufrag:'),
@@ -209,6 +211,7 @@ class WhipAnswerDiagnostics {
   final String? responseContentType;
   final String answerType;
   final String answerPreview;
+  final String answerSdp;
   final int answerLineCount;
   final bool hasFingerprint;
   final bool hasIceUfrag;
@@ -234,6 +237,9 @@ class WhipAnswerDiagnostics {
     if (cause != null) {
       fields.add('原始错误: $cause');
     }
+    if (answerSdp.isNotEmpty) {
+      fields.add('完整 answer SDP:\n$answerSdp');
+    }
     return fields.join('；');
   }
 }
@@ -245,11 +251,25 @@ class _WebRtcAnswer {
   final String type;
 }
 
-class WhipSignalingException implements Exception {
-  const WhipSignalingException(this.message, [this.details]);
+class WhipSignalingException implements Exception, LivePublisherReportedError {
+  const WhipSignalingException(this.message, [this.details])
+    : reportedByPublisher = false;
+
+  const WhipSignalingException.reportedByPublisher(this.message, [this.details])
+    : reportedByPublisher = true;
 
   final String message;
   final Object? details;
+
+  @override
+  final bool reportedByPublisher;
+
+  WhipSignalingException asReportedByPublisher() {
+    if (reportedByPublisher) {
+      return this;
+    }
+    return WhipSignalingException.reportedByPublisher(message, details);
+  }
 
   @override
   String toString() {

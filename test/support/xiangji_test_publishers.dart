@@ -122,7 +122,7 @@ class ConnectionFailingLivePublisher implements LiveStreamPublisher {
         details: error,
       ),
     );
-    throw error;
+    throw error.asReportedByPublisher();
   }
 
   @override
