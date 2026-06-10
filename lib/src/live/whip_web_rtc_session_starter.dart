@@ -1,6 +1,7 @@
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'live_stream_publisher.dart';
+import 'whip_answer_sdp.dart';
 import 'whip_ice_gathering.dart';
 import 'whip_peer_connection_monitor.dart';
 import 'whip_publisher_status.dart';
@@ -79,9 +80,13 @@ class WhipWebRtcSessionStarter {
         sdp: offerSdp,
       );
       session.resourceUri = offerResult.resourceUri;
+      final answerSdp = splitWhipAnswerSdp(offerResult.answerSdp);
       try {
         await peerConnection.setRemoteDescription(
-          RTCSessionDescription(offerResult.answerSdp, offerResult.answerType),
+          RTCSessionDescription(
+            answerSdp.sessionDescriptionSdp,
+            offerResult.answerType,
+          ),
         );
       } catch (error, stackTrace) {
         Error.throwWithStackTrace(
@@ -95,6 +100,22 @@ class WhipWebRtcSessionStarter {
           ),
           stackTrace,
         );
+      }
+      for (final candidate in answerSdp.candidates) {
+        try {
+          await peerConnection.addCandidate(candidate);
+        } catch (error, stackTrace) {
+          Error.throwWithStackTrace(
+            WhipSignalingException(
+              'WebRTC 接收端返回的 ICE candidate 无法添加。',
+              '${offerResult.diagnostics.describe(config: config, cause: error, offerSdp: offerSdp)}；'
+                  '失败 candidate: ${candidate.candidate ?? '空'}；'
+                  'sdpMid=${candidate.sdpMid ?? '未返回'}；'
+                  'sdpMLineIndex=${candidate.sdpMLineIndex ?? '未返回'}',
+            ),
+            stackTrace,
+          );
+        }
       }
       return session;
     } catch (error, stackTrace) {
