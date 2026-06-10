@@ -57,3 +57,4 @@ jobs:
         with:
           files: build/app/outputs/flutter-apk/xiangji-${{ github.ref_name }}.apk
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
