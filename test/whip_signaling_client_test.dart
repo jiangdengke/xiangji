@@ -11,13 +11,20 @@ import 'package:xiangji/src/live/whip_signaling_client.dart';
 void main() {
   test('signaling client posts JSON offer and reads JSON answer', () async {
     final requests = <_RecordedRequest>[];
+    const answerSdp = '''v=0
+a=ice-ufrag:testUfrag
+a=ice-pwd:testPwd
+a=fingerprint:sha-256 00:11
+m=video 9 UDP/TLS/RTP/SAVPF 96
+''';
     final client = WhipSignalingClient(
       client: _RecordingHttpClient(
         onRequest: (http.BaseRequest request, String body) async {
           requests.add(_RecordedRequest(request: request, body: body));
           return http.Response(
-            jsonEncode(<String, String>{'sdp': 'v=0\r\n', 'type': 'answer'}),
+            jsonEncode(<String, String>{'sdp': answerSdp, 'type': 'answer'}),
             201,
+            headers: <String, String>{'content-type': 'application/json'},
           );
         },
       ),
@@ -33,9 +40,19 @@ void main() {
       sdp: 'offer-sdp',
     );
 
-    expect(result.answerSdp, 'v=0');
+    expect(result.answerSdp, answerSdp.trim());
     expect(result.answerType, 'answer');
     expect(result.resourceUri, isNull);
+    expect(result.diagnostics.responseStatusCode, 201);
+    expect(result.diagnostics.responseContentType, 'application/json');
+    expect(result.diagnostics.answerType, 'answer');
+    expect(result.diagnostics.answerLineCount, 5);
+    expect(result.diagnostics.hasVideoMedia, isTrue);
+    expect(result.diagnostics.hasAudioMedia, isFalse);
+    expect(result.diagnostics.hasFingerprint, isTrue);
+    expect(result.diagnostics.hasIceUfrag, isTrue);
+    expect(result.diagnostics.hasIcePwd, isTrue);
+    expect(result.diagnostics.answerPreview, contains('v=0'));
     expect(requests, hasLength(1));
     expect(requests.single.request.method, 'POST');
     expect(jsonDecode(requests.single.body), <String, dynamic>{

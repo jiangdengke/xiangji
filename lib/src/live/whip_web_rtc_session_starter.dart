@@ -78,9 +78,19 @@ class WhipWebRtcSessionStarter {
         sdp: localDescription.sdp ?? '',
       );
       session.resourceUri = offerResult.resourceUri;
-      await peerConnection.setRemoteDescription(
-        RTCSessionDescription(offerResult.answerSdp, offerResult.answerType),
-      );
+      try {
+        await peerConnection.setRemoteDescription(
+          RTCSessionDescription(offerResult.answerSdp, offerResult.answerType),
+        );
+      } catch (error, stackTrace) {
+        Error.throwWithStackTrace(
+          WhipSignalingException(
+            'WebRTC 接收端返回的 SDP answer 无法设置为远端描述。',
+            offerResult.diagnostics.describe(config: config, cause: error),
+          ),
+          stackTrace,
+        );
+      }
       return session;
     } catch (error, stackTrace) {
       try {

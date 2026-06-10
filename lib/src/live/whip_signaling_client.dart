@@ -46,6 +46,10 @@ class WhipSignalingClient {
       answerSdp: answer.sdp,
       answerType: answer.type,
       resourceUri: null,
+      diagnostics: WhipAnswerDiagnostics._fromResponse(
+        response: response,
+        answer: answer,
+      ),
     );
   }
 
@@ -159,11 +163,79 @@ class WhipOfferResult {
     required this.answerSdp,
     required this.answerType,
     required this.resourceUri,
+    required this.diagnostics,
   });
 
   final String answerSdp;
   final String answerType;
   final Uri? resourceUri;
+  final WhipAnswerDiagnostics diagnostics;
+}
+
+class WhipAnswerDiagnostics {
+  const WhipAnswerDiagnostics({
+    required this.responseStatusCode,
+    required this.responseContentType,
+    required this.answerType,
+    required this.answerPreview,
+    required this.answerLineCount,
+    required this.hasFingerprint,
+    required this.hasIceUfrag,
+    required this.hasIcePwd,
+    required this.hasVideoMedia,
+    required this.hasAudioMedia,
+  });
+
+  factory WhipAnswerDiagnostics._fromResponse({
+    required http.Response response,
+    required _WebRtcAnswer answer,
+  }) {
+    final sdp = answer.sdp;
+    return WhipAnswerDiagnostics(
+      responseStatusCode: response.statusCode,
+      responseContentType: response.headers['content-type'],
+      answerType: answer.type,
+      answerPreview: _bodyPreview(sdp),
+      answerLineCount: sdp.isEmpty ? 0 : sdp.split(RegExp(r'\r?\n')).length,
+      hasFingerprint: sdp.contains('a=fingerprint:'),
+      hasIceUfrag: sdp.contains('a=ice-ufrag:'),
+      hasIcePwd: sdp.contains('a=ice-pwd:'),
+      hasVideoMedia: sdp.contains(RegExp(r'(^|\r?\n)m=video\s')),
+      hasAudioMedia: sdp.contains(RegExp(r'(^|\r?\n)m=audio\s')),
+    );
+  }
+
+  final int responseStatusCode;
+  final String? responseContentType;
+  final String answerType;
+  final String answerPreview;
+  final int answerLineCount;
+  final bool hasFingerprint;
+  final bool hasIceUfrag;
+  final bool hasIcePwd;
+  final bool hasVideoMedia;
+  final bool hasAudioMedia;
+
+  String describe({required LiveStreamConfig config, Object? cause}) {
+    final fields = <String>[
+      'streamId=${config.streamId}',
+      'endpoint=${config.endpoint}',
+      'HTTP=$responseStatusCode',
+      'content-type=${responseContentType ?? '未返回'}',
+      'answer type=$answerType',
+      'SDP 行数=$answerLineCount',
+      '包含 m=video=$hasVideoMedia',
+      '包含 m=audio=$hasAudioMedia',
+      '包含 a=fingerprint=$hasFingerprint',
+      '包含 a=ice-ufrag=$hasIceUfrag',
+      '包含 a=ice-pwd=$hasIcePwd',
+      'answer 开头: $answerPreview',
+    ];
+    if (cause != null) {
+      fields.add('原始错误: $cause');
+    }
+    return fields.join('；');
+  }
 }
 
 class _WebRtcAnswer {
