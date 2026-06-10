@@ -63,6 +63,16 @@ m=video 9 UDP/TLS/RTP/SAVPF 96
       ),
       contains('完整 answer SDP:\n${answerSdp.trim()}'),
     );
+    expect(
+      result.diagnostics.describe(
+        config: LiveStreamConfig(
+          endpoint: Uri.parse('http://127.0.0.1:9090/offer/camera1'),
+          streamId: 'camera1',
+        ),
+        offerSdp: 'offer-sdp',
+      ),
+      contains('完整 offer SDP:\noffer-sdp'),
+    );
     expect(requests, hasLength(1));
     expect(requests.single.request.method, 'POST');
     expect(jsonDecode(requests.single.body), <String, dynamic>{

@@ -73,9 +73,10 @@ class WhipWebRtcSessionStarter {
 
       final localDescription =
           await peerConnection.getLocalDescription() ?? offer;
+      final offerSdp = localDescription.sdp ?? '';
       final offerResult = await _signalingClient.publishOffer(
         config: config,
-        sdp: localDescription.sdp ?? '',
+        sdp: offerSdp,
       );
       session.resourceUri = offerResult.resourceUri;
       try {
@@ -86,7 +87,11 @@ class WhipWebRtcSessionStarter {
         Error.throwWithStackTrace(
           WhipSignalingException(
             'WebRTC 接收端返回的 SDP answer 无法设置为远端描述。',
-            offerResult.diagnostics.describe(config: config, cause: error),
+            offerResult.diagnostics.describe(
+              config: config,
+              cause: error,
+              offerSdp: offerSdp,
+            ),
           ),
           stackTrace,
         );

@@ -219,7 +219,11 @@ class WhipAnswerDiagnostics {
   final bool hasVideoMedia;
   final bool hasAudioMedia;
 
-  String describe({required LiveStreamConfig config, Object? cause}) {
+  String describe({
+    required LiveStreamConfig config,
+    Object? cause,
+    String? offerSdp,
+  }) {
     final fields = <String>[
       'streamId=${config.streamId}',
       'endpoint=${config.endpoint}',
@@ -236,6 +240,9 @@ class WhipAnswerDiagnostics {
     ];
     if (cause != null) {
       fields.add('原始错误: $cause');
+    }
+    if (offerSdp != null && offerSdp.isNotEmpty) {
+      fields.add('完整 offer SDP:\n$offerSdp');
     }
     if (answerSdp.isNotEmpty) {
       fields.add('完整 answer SDP:\n$answerSdp');
