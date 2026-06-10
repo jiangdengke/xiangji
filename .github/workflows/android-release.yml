@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -52,9 +54,35 @@ jobs:
       - name: Rename APK
         run: cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/xiangji-${{ github.ref_name }}.apk
 
+      - name: Build release notes
+        run: |
+          set -euo pipefail
+          tag_name="${GITHUB_REF_NAME}"
+
+          tag_body=""
+          if [ "$(git cat-file -t "${tag_name}")" = "tag" ]; then
+            tag_body="$(git for-each-ref "refs/tags/${tag_name}" --format='%(contents)')"
+            tag_body="$(printf '%s\n' "${tag_body}" | sed "1{/^发布 ${tag_name}$/d;}" | sed '/./,$!d')"
+          fi
+
+          {
+            echo "## 更新内容"
+            if [ -n "${tag_body}" ]; then
+              printf '%s\n' "${tag_body}"
+            else
+              echo "- 本次发布包含应用更新，暂无详细发布说明。"
+            fi
+            echo
+            echo "## 验证"
+            echo "- GitHub Actions 会执行 flutter analyze、flutter test 和 release APK 构建"
+            echo
+            echo "## 产物"
+            echo "- xiangji-${tag_name}.apk"
+          } > release-notes.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/xiangji-${{ github.ref_name }}.apk
-          generate_release_notes: true
+          body_path: release-notes.md
           prerelease: ${{ contains(github.ref_name, '-') }}
