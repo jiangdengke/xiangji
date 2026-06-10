@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../controller/xiangji_session_controller.dart';
 import '../domain.dart';
@@ -49,60 +50,104 @@ class StreamDashboardLogRow extends StatelessWidget {
     final levelColor = _levelColor(context, entry.level);
     final topicColor = _topicColor(context, entry.topic);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: levelColor.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: levelColor.withValues(alpha: 0.16)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            SizedBox(
-              width: 56,
-              child: Text(
-                _presenter.timeText(entry),
-                style: TextStyle(color: levelColor, fontSize: 11),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+    final borderRadius = BorderRadius.circular(8);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: borderRadius,
+        onTap: () => _showLogDetails(context),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: levelColor.withValues(alpha: 0.06),
+            borderRadius: borderRadius,
+            border: Border.all(color: levelColor.withValues(alpha: 0.16)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SizedBox(
+                  width: 56,
+                  child: Text(
+                    _presenter.timeText(entry),
+                    style: TextStyle(color: levelColor, fontSize: 11),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      _LogPill(
-                        color: topicColor,
-                        label: _presenter.topicLabel(entry.topic),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: <Widget>[
+                          _LogPill(
+                            color: topicColor,
+                            label: _presenter.topicLabel(entry.topic),
+                          ),
+                          _LogPill(
+                            color: levelColor,
+                            label: _presenter.levelLabel(entry.level),
+                          ),
+                          _LogPill(color: colorScheme.outline, label: '详情'),
+                        ],
                       ),
-                      _LogPill(
-                        color: levelColor,
-                        label: _presenter.levelLabel(entry.level),
+                      const SizedBox(height: 6),
+                      Text(
+                        entry.message,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    entry.message,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                Icon(Icons.chevron_right, color: colorScheme.outline, size: 18),
+              ],
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  Future<void> _showLogDetails(BuildContext context) async {
+    final logText = entry.fullText;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text('${_presenter.topicLabel(entry.topic)}日志详情'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(child: SelectableText(logText)),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: logText));
+                if (!dialogContext.mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(
+                  dialogContext,
+                ).showSnackBar(const SnackBar(content: Text('日志详情已复制')));
+              },
+              child: const Text('复制'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
     );
   }
 

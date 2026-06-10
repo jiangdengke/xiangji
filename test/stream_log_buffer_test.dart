@@ -19,6 +19,8 @@ void main() {
     expect(buffer.entries, hasLength(2));
     expect(buffer.entries.first.message, 'second');
     expect(buffer.latest?.message, 'third detail line');
+    expect(buffer.latest?.fullText, 'third detail line\nstack line');
+    expect(buffer.latest?.hasFullText, isTrue);
     expect(buffer.latest?.topic, LogTopic.error);
     expect(
       buffer.recentEntries.map((StreamLogEntry entry) => entry.message),
@@ -34,5 +36,6 @@ void main() {
 
     expect(buffer.latest?.message.length, lessThan(details.length));
     expect(buffer.latest?.message, endsWith('...'));
+    expect(buffer.latest?.fullText, 'message $details');
   });
 }

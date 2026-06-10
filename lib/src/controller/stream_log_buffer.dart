@@ -21,13 +21,18 @@ class StreamLogBuffer {
     Object? details,
   }) {
     final detailText = _compactDetails(details);
+    final fullDetailText = _fullDetails(details);
     final composed = detailText == null ? message : '$message $detailText';
+    final fullComposed = fullDetailText == null
+        ? null
+        : '$message $fullDetailText';
     _entries.add(
       StreamLogEntry(
         timestamp: DateTime.now(),
         level: level,
         topic: topic,
         message: composed,
+        fullMessage: fullComposed == composed ? null : fullComposed,
       ),
     );
     while (_entries.length > maxEntries) {
@@ -49,5 +54,17 @@ class StreamLogBuffer {
       return firstLine;
     }
     return '${firstLine.substring(0, 180)}...';
+  }
+
+  String? _fullDetails(Object? details) {
+    if (details == null) {
+      return null;
+    }
+
+    final raw = details.toString().trim();
+    if (raw.isEmpty) {
+      return null;
+    }
+    return raw;
   }
 }
