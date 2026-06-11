@@ -255,6 +255,7 @@ class WebRTCServer:
 
         # 每路只保留当前连接，新的连接进来时可以覆盖旧连接
         self.camera_pc_map: Dict[str, RTCPeerConnection] = {}
+        self.camera_track_tasks: Dict[str, Set[asyncio.Task]] = {}
 
     async def offer(self, request: web.Request):
         """
@@ -302,6 +303,7 @@ class WebRTCServer:
         # 如果该 camera 已经有旧连接，先关闭旧连接
         old_pc = self.camera_pc_map.get(camera_name)
         if old_pc is not None:
+            await self._cancel_camera_tasks(camera_name)
             await old_pc.close()
             self.pcs.discard(old_pc)
             self.ros_node.get_logger().warn(
@@ -330,6 +332,7 @@ class WebRTCServer:
 
                 if self.camera_pc_map.get(camera_name) is pc:
                     self.camera_pc_map.pop(camera_name, None)
+                    await self._cancel_camera_tasks(camera_name)
 
                 self.ros_node.get_logger().warn(
                     f"[{camera_name}] WebRTC 连接已关闭/断开"
@@ -342,10 +345,14 @@ class WebRTCServer:
             )
 
             if track.kind == "video":
-                asyncio.create_task(self._consume_video_track(camera_name, track))
+                task = asyncio.create_task(
+                    self._consume_video_track(camera_name, track)
+                )
+                self._track_camera_task(camera_name, task)
             else:
                 media_blackhole.addTrack(track)
-                asyncio.create_task(media_blackhole.start())
+                task = asyncio.create_task(media_blackhole.start())
+                self._track_camera_task(camera_name, task)
 
             @track.on("ended")
             async def on_ended():
@@ -374,6 +381,42 @@ class WebRTCServer:
             }
         )
 
+    def _track_camera_task(self, camera_name: str, task: asyncio.Task):
+        """
+        保存每路 track 消费任务，避免任务没有强引用时被事件循环回收。
+        """
+        tasks = self.camera_track_tasks.setdefault(camera_name, set())
+        tasks.add(task)
+        task.add_done_callback(
+            lambda done_task: self._discard_camera_task(camera_name, done_task)
+        )
+
+    def _discard_camera_task(self, camera_name: str, task: asyncio.Task):
+        tasks = self.camera_track_tasks.get(camera_name)
+        if tasks is not None:
+            tasks.discard(task)
+            if not tasks:
+                self.camera_track_tasks.pop(camera_name, None)
+
+        if task.cancelled():
+            return
+
+        exception = task.exception()
+        if exception is not None:
+            self.ros_node.get_logger().error(
+                f"[{camera_name}] track 任务异常退出: {repr(exception)}"
+            )
+
+    async def _cancel_camera_tasks(self, camera_name: str):
+        tasks = self.camera_track_tasks.pop(camera_name, set())
+        if not tasks:
+            return
+
+        for task in tasks:
+            task.cancel()
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     async def _consume_video_track(self, camera_name: str, track):
         """
         持续从 WebRTC video track 中取帧，然后发布到 ROS2。
@@ -392,7 +435,7 @@ class WebRTCServer:
                 self.ros_node.publish_frame(camera_name, img_bgr)
 
                 frame_count += 1
-                if frame_count % 100 == 0:
+                if frame_count == 1 or frame_count % 100 == 0:
                     h, w = img_bgr.shape[:2]
                     self.ros_node.get_logger().info(
                         f"[{camera_name}] 已发布 {frame_count} 帧, size={w}x{h}"
@@ -410,6 +453,10 @@ class WebRTCServer:
                 )
                 break
 
+        self.ros_node.get_logger().warn(
+            f"[{camera_name}] 视频接收任务退出，累计 {frame_count} 帧"
+        )
+
     async def close_all(self):
         """
         关闭所有 WebRTC 连接。
@@ -422,6 +469,13 @@ class WebRTCServer:
 
         if close_tasks:
             await asyncio.gather(*close_tasks)
+
+        cancel_tasks = []
+        for camera_name in list(self.camera_track_tasks):
+            cancel_tasks.append(self._cancel_camera_tasks(camera_name))
+
+        if cancel_tasks:
+            await asyncio.gather(*cancel_tasks)
 
         self.pcs.clear()
         self.camera_pc_map.clear()
